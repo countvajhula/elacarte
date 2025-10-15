@@ -1,0 +1,9 @@
+# vim noise
+*~
+*.sw?
+
+# Build
+*.elc
+dist
+coverage
+*.html
