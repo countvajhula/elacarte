@@ -30,16 +30,20 @@
 (require 'cl-lib)
 (require 'url)
 
-(defvar elacarte-repo-dir
-  (expand-file-name "xelpa" user-emacs-directory)
-  "The root directory for the elacarte recipe repository.")
+(defvar elacarte-base-dir
+  (expand-file-name "elacarte" user-emacs-directory)
+  "The base path for elacarte.")
 
 (defvar elacarte-recipes-file
-  (expand-file-name "recipes.el" user-emacs-directory)
+  (expand-file-name "recipes.el" elacarte-base-dir)
   "The master file containing the list of local recipes.")
 
+(defvar elacarte-repo-dir
+  (expand-file-name "xelpa" elacarte-base-dir)
+  "The path to the recipe repository managed by Elacarte.")
+
 (defvar elacarte-temp-dir
-  (expand-file-name "elacarte/tmp" user-emacs-directory)
+  (expand-file-name "tmp" elacarte-base-dir)
   "Temporary directory for `elacarte` operations, like cloning repos.")
 
 (defun elacarte-add-recipe (recipe &optional replace)
@@ -196,19 +200,19 @@ will be overwritten."
 (defun elacarte-build-recipe-repository ()
   "Build the local recipe repository from `elacarte-recipes-file'.
 This parses the master recipe list and generates the individual
-recipe files in the `xelpa/recipes/` directory."
+recipe files in the `elacarte/recipes/` directory."
   (interactive)
-  (let* ((xelpa-recipes-dir (expand-file-name "recipes" elacarte-repo-dir))
-         (recipes nil))
+  (let ((elacarte-recipes-dir (expand-file-name "recipes" elacarte-repo-dir))
+        (recipes nil))
     (unless (file-exists-p elacarte-recipes-file)
       (user-error "Recipes file not found: %s" elacarte-recipes-file))
 
-    (message "Building 'xelpa' recipe repository...")
+    (message "Building Elacarte recipe repository...")
 
     ;; 1. Clean and create the target directory.
-    (when (file-directory-p xelpa-recipes-dir)
-      (delete-directory xelpa-recipes-dir t))
-    (make-directory xelpa-recipes-dir t)
+    (when (file-directory-p elacarte-recipes-dir)
+      (delete-directory elacarte-recipes-dir 'recursive))
+    (make-directory elacarte-recipes-dir 'parents)
 
     ;; 2. Read the master list of recipes.
     (setq recipes (with-temp-buffer
@@ -219,13 +223,13 @@ recipe files in the `xelpa/recipes/` directory."
     (dolist (recipe recipes)
       (let* ((recipe-id (car recipe))
              (package-name (if (symbolp recipe-id) (symbol-name recipe-id) recipe-id))
-             (target-file (expand-file-name package-name xelpa-recipes-dir)))
+             (target-file (expand-file-name package-name elacarte-recipes-dir)))
         (with-temp-file target-file
           (prin1 recipe (current-buffer)))))
 
     (message "Successfully built %d recipes in %s"
              (length recipes)
-             xelpa-recipes-dir)))
+             elacarte-recipes-dir)))
 
 (provide 'elacarte)
 
