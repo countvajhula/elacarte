@@ -32,15 +32,14 @@
 
 (defvar elacarte-base-dir
   (expand-file-name "elacarte" user-emacs-directory)
-  "The base path for elacarte.")
+  "The base path for elacarte operations.")
+
+(defvar elacarte-repo-name "xelpa"
+  "The name of the local recipe repository to be built.")
 
 (defvar elacarte-recipes-file
   (expand-file-name "recipes.el" elacarte-base-dir)
   "The master file containing the list of local recipes.")
-
-(defvar elacarte-repo-dir
-  (expand-file-name "xelpa" elacarte-base-dir)
-  "The path to the recipe repository managed by Elacarte.")
 
 (defvar elacarte-temp-dir
   (expand-file-name "tmp" elacarte-base-dir)
@@ -200,36 +199,49 @@ will be overwritten."
 (defun elacarte-build-recipe-repository ()
   "Build the local recipe repository from `elacarte-recipes-file'.
 This parses the master recipe list and generates the individual
-recipe files in the `elacarte/recipes/` directory."
+recipe files and the necessary protocol implementation file in
+the `elacarte-base-dir'."
   (interactive)
-  (let ((elacarte-recipes-dir (expand-file-name "recipes" elacarte-repo-dir))
-        (recipes nil))
+  (let* ((repo-dir (expand-file-name elacarte-repo-name elacarte-base-dir))
+         (recipes-dir (expand-file-name "recipes" repo-dir))
+         (protocol-file (expand-file-name (concat elacarte-repo-name ".el") repo-dir))
+         (recipes nil))
     (unless (file-exists-p elacarte-recipes-file)
       (user-error "Recipes file not found: %s" elacarte-recipes-file))
 
-    (message "Building Elacarte recipe repository...")
+    (message "Building '%s' recipe repository..." elacarte-repo-name)
 
-    ;; 1. Clean and create the target directory.
-    (when (file-directory-p elacarte-recipes-dir)
-      (delete-directory elacarte-recipes-dir 'recursive))
-    (make-directory elacarte-recipes-dir 'parents)
+    ;; 1. Clean and create the target directories.
+    (when (file-directory-p repo-dir)
+      (delete-directory repo-dir 'recursive))
+    (make-directory recipes-dir 'parents)
 
-    ;; 2. Read the master list of recipes.
+    ;; 2. Generate and write the recipe protocol implementation file from the template.
+    (let* ((template-file (expand-file-name "recipe-repo.el.template"
+                                            (file-name-directory (or load-file-name buffer-file-name))))
+           (template-content (with-temp-buffer
+                               (insert-file-contents template-file)
+                               (buffer-string)))
+           (protocol-content (format template-content elacarte-repo-name)))
+      (with-temp-file protocol-file
+        (insert protocol-content)))
+
+    ;; 3. Read the master list of recipes.
     (setq recipes (with-temp-buffer
                     (insert-file-contents elacarte-recipes-file)
                     (car (read-from-string (buffer-string)))))
 
-    ;; 3. Write each recipe to its own file.
+    ;; 4. Write each recipe to its own file.
     (dolist (recipe recipes)
       (let* ((recipe-id (car recipe))
              (package-name (if (symbolp recipe-id) (symbol-name recipe-id) recipe-id))
-             (target-file (expand-file-name package-name elacarte-recipes-dir)))
+             (target-file (expand-file-name package-name recipes-dir)))
         (with-temp-file target-file
           (prin1 recipe (current-buffer)))))
 
-    (message "Successfully built %d recipes in %s"
+    (message "Successfully built %d recipes and protocol file in %s"
              (length recipes)
-             elacarte-recipes-dir)))
+             repo-dir)))
 
 (provide 'elacarte)
 
