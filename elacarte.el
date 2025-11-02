@@ -196,20 +196,22 @@ will be overwritten."
         (delete-directory clone-dir t)
         (message "Cleaned up temporary repository: %s" clone-dir)))))
 
-(defun elacarte-build-recipe-repository ()
+(defun elacarte-build-recipe-repository (&optional repo-name)
   "Build the local recipe repository from `elacarte-recipes-file'.
 This parses the master recipe list and generates the individual
 recipe files and the necessary protocol implementation file in
-the `elacarte-base-dir'."
+the `elacarte-base-dir'.
+If REPO-NAME is nil, defaults to `elacarte-repo-name'."
   (interactive)
-  (let* ((repo-dir (expand-file-name elacarte-repo-name elacarte-base-dir))
+  (let* ((repo-name (or repo-name elacarte-repo-name))
+         (repo-dir (expand-file-name repo-name elacarte-base-dir))
          (recipes-dir (expand-file-name "recipes" repo-dir))
-         (protocol-file (expand-file-name (concat elacarte-repo-name ".el") repo-dir))
+         (protocol-file (expand-file-name (concat repo-name ".el") repo-dir))
          (recipes nil))
     (unless (file-exists-p elacarte-recipes-file)
       (user-error "Recipes file not found: %s" elacarte-recipes-file))
 
-    (message "Building '%s' recipe repository..." elacarte-repo-name)
+    (message "Building '%s' recipe repository..." repo-name)
 
     ;; 1. Clean and create the target directories.
     (when (file-directory-p repo-dir)
@@ -222,7 +224,7 @@ the `elacarte-base-dir'."
            (template-content (with-temp-buffer
                                (insert-file-contents template-file)
                                (buffer-string)))
-           (protocol-content (format template-content elacarte-repo-name)))
+           (protocol-content (format template-content repo-name)))
       (with-temp-file protocol-file
         (insert protocol-content)))
 
