@@ -243,6 +243,33 @@ the `elacarte-base-dir'."
              (length recipes)
              repo-dir)))
 
+(defun elacarte-register-recipe-repository (&optional repo-name)
+  "Register the local recipe repository REPO-NAME with straight.el.
+This function assumes the repository has already been built with
+`elacarte-build-recipe-repository'. It performs the three steps
+necessary to make the repository known to the current Emacs session.
+If REPO-NAME is nil, defaults to `elacarte-repo-name'.
+Interactively, also uses the value of `elacarte-repo-name'."
+  (interactive (list elacarte-repo-name))
+  (let* ((repo-name (or repo-name elacarte-repo-name))
+         (repo-dir (expand-file-name repo-name elacarte-base-dir)))
+    (when (file-directory-p repo-dir)
+      (message "--- Registering '%s' recipe repository ---" repo-name)
+
+      ;; 1. Make the package known to straight.el. `:build nil` is crucial.
+      (straight-use-package
+       `(,(intern repo-name) :type git :local-repo ,repo-dir :build nil))
+
+      ;; 2. Load the recipe protocol implementation.
+      (add-to-list 'load-path repo-dir)
+      (require (intern repo-name))
+
+      ;; 3. Add to the head of the list of repositories to search.
+      (add-to-list 'straight-recipe-repositories (intern repo-name))
+
+      (message "--- '%s' registration complete ---" repo-name))))
+
+
 (provide 'elacarte)
 
 ;;; elacarte.el ends here
