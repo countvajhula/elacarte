@@ -38,7 +38,7 @@
   "The name of the local recipe repository to be built.")
 
 (defvar elacarte-recipes-file
-  (expand-file-name "recipes.el" elacarte-base-dir)
+  (expand-file-name "recipes.eld" elacarte-base-dir)
   "The master file containing the list of local recipes.")
 
 (defvar elacarte-temp-dir
@@ -164,7 +164,7 @@ recipes will be overwritten."
     (elacarte--add-recipes-from-list recipes replace noconfirm)))
 
 (defun elacarte-add-recipes-by-repo-url (url &optional replace)
-  "Clone git repository from URL and add recipes from its `recipes.el` file.
+  "Clone git repository from URL and add recipes from its `recipes.eld` file.
 
 URL can be a remote URL or a local file path (including `~/`).
 The repository is cloned to a temporary location and deleted
@@ -188,9 +188,9 @@ will be overwritten."
             (user-error "Failed to clone repository: %s" expanded-url))
           (message "Cloning complete.")
 
-          (let* ((recipes-file (expand-file-name "recipes.el" clone-dir)))
+          (let* ((recipes-file (expand-file-name "recipes.eld" clone-dir)))
             (unless (file-exists-p recipes-file)
-              (user-error "No `recipes.el` file found in repository root."))
+              (user-error "No `recipes.eld` file found in repository root."))
             (elacarte-add-recipes-by-file-url recipes-file replace)))
       ;; Cleanup: delete the temporary repository.
       (when (file-directory-p clone-dir)
