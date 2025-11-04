@@ -134,33 +134,34 @@ The file is created if it does not exist."
     (search-forward "\n\n") ; Skip HTTP headers
     (buffer-substring-no-properties (point) (point-max))))
 
-(defun elacarte--add-recipes-from-list (recipes replace)
-  "Prompt to add RECIPES and add them if confirmed.
+(defun elacarte--add-recipes-from-list (recipes replace noconfirm)
+  "Add RECIPES, prompting for confirmation unless NOCONFIRM is non-nil.
 REPLACE is passed to `elacarte-add-recipe'."
   (let ((package-names (mapcar #'car recipes)))
-    (when (y-or-n-p
-           (format "The following %d recipes will be added. Proceed?\n%s"
-                   (length recipes)
-                   (mapconcat #'symbol-name package-names ", ")))
+    (when (or noconfirm
+              (y-or-n-p
+               (format "The following %d recipes will be added. Proceed?\n%s"
+                       (length recipes)
+                       (mapconcat #'symbol-name package-names ", "))))
       (dolist (recipe recipes)
         (elacarte-add-recipe recipe replace))
       (message "Successfully processed %d recipes." (length recipes)))))
 
-(defun elacarte-add-recipes-by-file-url (url &optional replace)
+(defun elacarte-add-recipes-by-file-url (url &optional replace noconfirm)
   "Fetch recipes from URL and add them to `elacarte-recipes-file'.
 
 URL can be a local file path or a web URL pointing to a file
 formatted like `elacarte-recipes-file'.
 
-Prompts for confirmation before adding. If REPLACE is non-nil
-(or with a prefix argument interactively), existing recipes
-will be overwritten."
+Prompts for confirmation before adding unless NOCONFIRM is non-nil. If
+REPLACE is non-nil (or with a prefix argument interactively), existing
+recipes will be overwritten."
   (interactive (list (read-string "URL or file path: ") current-prefix-arg))
   (let* ((content (if (string-match-p "^https?://" url)
                       (elacarte--get-content-from-web url)
                     (elacarte--get-content-from-disk url)))
          (recipes (car (read-from-string content))))
-    (elacarte--add-recipes-from-list recipes replace)))
+    (elacarte--add-recipes-from-list recipes replace noconfirm)))
 
 (defun elacarte-add-recipes-by-repo-url (url &optional replace)
   "Clone git repository from URL and add recipes from its `recipes.el` file.
