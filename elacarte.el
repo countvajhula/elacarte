@@ -221,7 +221,7 @@ If REPO-NAME is nil, defaults to `elacarte-repo-name'."
 
     ;; 2. Generate and write the recipe protocol implementation file from the template.
     (let* ((template-file (expand-file-name "recipe-repo.el.template"
-                                            (file-name-directory (or load-file-name buffer-file-name))))
+                                            (file-name-directory (locate-library "elacarte"))))
            (template-content (with-temp-buffer
                                (insert-file-contents template-file)
                                (buffer-string)))
