@@ -66,6 +66,11 @@ would house the user's curated and preferred recipes.")
   (with-temp-file file
     (insert string)))
 
+(defun elacarte--pretty-print (obj)
+  "A readable string representation of OBJ."
+  (let ((print-level nil) (print-length nil)) ; Ensure full printing.
+    (pp-to-string obj)))
+
 (defun elacarte-add-recipe (recipe &optional replace)
   "Add or update RECIPE in `elacarte-recipes-file'.
 
@@ -106,9 +111,8 @@ The file is created if it does not exist."
 
       ;; 4. Add the new recipe to the front and write back to disk.
       (elacarte--write elacarte-recipes-file
-        (let ((print-level nil) (print-length nil)) ; Ensure full printing.
-          ;; Use `pp` to pretty-print for better readability.
-          (pp-to-string (cons recipe updated-recipes)))))
+                       (elacarte--pretty-print
+                        (cons recipe updated-recipes))))
 
     (message "Recipe for '%s' %s %s"
              package-name
@@ -131,8 +135,7 @@ The file is created if it does not exist."
                               (lambda (r) (equal (car r) package-name))
                               existing-recipes)))
         (elacarte--write elacarte-recipes-file
-                         (let ((print-level nil) (print-length nil))
-                           (pp-to-string updated-recipes)))
+                         (elacarte--pretty-print updated-recipes))
         (message "Recipe for '%s' removed." package-name)))))
 
 (defun elacarte--get-content-from-disk (file-path)
