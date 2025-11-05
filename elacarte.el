@@ -55,6 +55,12 @@ would house the user's curated and preferred recipes.")
   (expand-file-name "tmp" elacarte-base-dir)
   "Temporary directory for `elacarte` operations, like cloning repos.")
 
+(defun elacarte--read-data (file)
+  "Read a Lisp datum from FILE."
+  (car
+   (read-from-string
+    (elacarte--get-content-from-disk file))))
+
 (defun elacarte-add-recipe (recipe &optional replace)
   "Add or update RECIPE in `elacarte-recipes-file'.
 
@@ -79,10 +85,7 @@ The file is created if it does not exist."
       (with-temp-file elacarte-recipes-file
         (insert "()")))
 
-    (setq existing-recipes (with-temp-buffer
-                             (insert-file-contents elacarte-recipes-file)
-                             ;; Use `read-from-string` to handle empty files gracefully.
-                             (car (read-from-string (buffer-string)))))
+    (setq existing-recipes (elacarte--read-data elacarte-recipes-file))
 
     ;; Check if a recipe for this package already exists.
     (setq old-recipe (assoc package-name existing-recipes))
@@ -110,14 +113,10 @@ The file is created if it does not exist."
 (defun elacarte-remove-recipe (package-name)
   "Remove the recipe for PACKAGE-NAME from `elacarte-recipes-file'."
   (interactive
-   (let ((recipes (with-temp-buffer
-                    (insert-file-contents elacarte-recipes-file)
-                    (car (read-from-string (buffer-string))))))
+   (let ((recipes (elacarte--read-data elacarte-recipes-file)))
      (list (intern (completing-read "Remove recipe for package: "
                                     (mapcar #'car recipes))))))
-  (let* ((existing-recipes (with-temp-buffer
-                             (insert-file-contents elacarte-recipes-file)
-                             (car (read-from-string (buffer-string)))))
+  (let* ((existing-recipes (elacarte--read-data elacarte-recipes-file))
          (recipe-to-remove (assoc package-name existing-recipes)))
     (unless recipe-to-remove
       (user-error "No recipe found for package '%s'" package-name))
@@ -133,8 +132,10 @@ The file is created if it does not exist."
 
 (defun elacarte--get-content-from-disk (file-path)
   "Return content of FILE-PATH as a string."
+  (unless (file-exists-p file-path)
+    (user-error "File not found: %s" file-path))
   (with-temp-buffer
-    (insert-file-contents file-path)
+    (insert-file-contents-literally file-path)
     (buffer-string)))
 
 (defun elacarte--get-content-from-web (url)
@@ -233,17 +234,13 @@ If REPO-NAME is nil, defaults to `elacarte-repo-name'."
     ;; 2. Generate and write the recipe protocol implementation file from the template.
     (let* ((template-file (expand-file-name "recipe-repo.el.template"
                                             (file-name-directory (locate-library "elacarte"))))
-           (template-content (with-temp-buffer
-                               (insert-file-contents template-file)
-                               (buffer-string)))
+           (template-content (elacarte--get-content-from-disk template-file))
            (protocol-content (format template-content repo-name)))
       (with-temp-file protocol-file
         (insert protocol-content)))
 
     ;; 3. Read the master list of recipes.
-    (setq recipes (with-temp-buffer
-                    (insert-file-contents elacarte-recipes-file)
-                    (car (read-from-string (buffer-string)))))
+    (setq recipes (elacarte--read-data elacarte-recipes-file))
 
     ;; 4. Write each recipe to its own file.
     (dolist (recipe recipes)
