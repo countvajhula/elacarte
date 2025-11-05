@@ -71,6 +71,30 @@ would house the user's curated and preferred recipes.")
   (let ((print-level nil) (print-length nil)) ; Ensure full printing.
     (pp-to-string obj)))
 
+(defun elacarte--remove-recipe (package-name recipes)
+  "Remove PACKAGE-NAME from RECIPES."
+  (cl-remove-if
+   (lambda (r) (equal (car r) package-name))
+   recipes))
+
+(defun elacarte-remove-recipe (package-name)
+  "Remove the recipe for PACKAGE-NAME from `elacarte-recipes-file'."
+  (interactive
+   (let ((recipes (elacarte--read-data elacarte-recipes-file)))
+     (list (intern (completing-read "Remove recipe for package: "
+                                    (mapcar #'car recipes))))))
+  (let* ((existing-recipes (elacarte--read-data elacarte-recipes-file))
+         (recipe-to-remove (assoc package-name existing-recipes)))
+    (unless recipe-to-remove
+      (user-error "No recipe found for package '%s'" package-name))
+
+    (when (y-or-n-p (format "Really remove recipe for '%s'?" package-name))
+      (let ((updated-recipes (elacarte--remove-recipe package-name
+                                                      existing-recipes)))
+        (elacarte--write elacarte-recipes-file
+                         (elacarte--pretty-print updated-recipes))
+        (message "Recipe for '%s' removed." package-name)))))
+
 (defun elacarte-add-recipe (recipe &optional replace)
   "Add or update RECIPE in `elacarte-recipes-file'.
 
@@ -105,9 +129,8 @@ The file is created if it does not exist."
       (user-error "Recipe for '%s' already exists. Use a prefix argument to replace it." package-name))
 
     ;; 3. Remove any old recipe for the same package to handle updates.
-    (let ((updated-recipes (cl-remove-if
-                            (lambda (r) (equal (car r) package-name))
-                            existing-recipes)))
+    (let ((updated-recipes (elacarte--remove-recipe package-name
+                                                    existing-recipes)))
 
       ;; 4. Add the new recipe to the front and write back to disk.
       (elacarte--write elacarte-recipes-file
@@ -118,25 +141,6 @@ The file is created if it does not exist."
              package-name
              (if old-recipe "updated in" "added to")
              (file-name-nondirectory elacarte-recipes-file))))
-
-(defun elacarte-remove-recipe (package-name)
-  "Remove the recipe for PACKAGE-NAME from `elacarte-recipes-file'."
-  (interactive
-   (let ((recipes (elacarte--read-data elacarte-recipes-file)))
-     (list (intern (completing-read "Remove recipe for package: "
-                                    (mapcar #'car recipes))))))
-  (let* ((existing-recipes (elacarte--read-data elacarte-recipes-file))
-         (recipe-to-remove (assoc package-name existing-recipes)))
-    (unless recipe-to-remove
-      (user-error "No recipe found for package '%s'" package-name))
-
-    (when (y-or-n-p (format "Really remove recipe for '%s'?" package-name))
-      (let ((updated-recipes (cl-remove-if
-                              (lambda (r) (equal (car r) package-name))
-                              existing-recipes)))
-        (elacarte--write elacarte-recipes-file
-                         (elacarte--pretty-print updated-recipes))
-        (message "Recipe for '%s' removed." package-name)))))
 
 (defun elacarte--get-content-from-disk (file-path)
   "Return content of FILE-PATH as a string."
