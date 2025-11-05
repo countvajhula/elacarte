@@ -61,6 +61,11 @@ would house the user's curated and preferred recipes.")
    (read-from-string
     (elacarte--get-content-from-disk file))))
 
+(defun elacarte--write (file string)
+  "Write STRING to FILE."
+  (with-temp-file file
+    (insert string)))
+
 (defun elacarte-add-recipe (recipe &optional replace)
   "Add or update RECIPE in `elacarte-recipes-file'.
 
@@ -82,8 +87,8 @@ The file is created if it does not exist."
     ;; 1. Read existing recipes, creating the file if it's missing.
     (unless (file-exists-p elacarte-recipes-file)
       (make-directory (file-name-directory elacarte-recipes-file) t)
-      (with-temp-file elacarte-recipes-file
-        (insert "()")))
+      (elacarte--write elacarte-recipes-file
+                       "()"))
 
     (setq existing-recipes (elacarte--read-data elacarte-recipes-file))
 
@@ -100,10 +105,10 @@ The file is created if it does not exist."
                             existing-recipes)))
 
       ;; 4. Add the new recipe to the front and write back to disk.
-      (with-temp-file elacarte-recipes-file
+      (elacarte--write elacarte-recipes-file
         (let ((print-level nil) (print-length nil)) ; Ensure full printing.
           ;; Use `pp` to pretty-print for better readability.
-          (pp (cons recipe updated-recipes) (current-buffer)))))
+          (pp-to-string (cons recipe updated-recipes)))))
 
     (message "Recipe for '%s' %s %s"
              package-name
@@ -125,9 +130,9 @@ The file is created if it does not exist."
       (let ((updated-recipes (cl-remove-if
                               (lambda (r) (equal (car r) package-name))
                               existing-recipes)))
-        (with-temp-file elacarte-recipes-file
-          (let ((print-level nil) (print-length nil))
-            (pp updated-recipes (current-buffer))))
+        (elacarte--write elacarte-recipes-file
+                         (let ((print-level nil) (print-length nil))
+                           (pp-to-string updated-recipes)))
         (message "Recipe for '%s' removed." package-name)))))
 
 (defun elacarte--get-content-from-disk (file-path)
@@ -236,8 +241,8 @@ If REPO-NAME is nil, defaults to `elacarte-repo-name'."
                                             (file-name-directory (locate-library "elacarte"))))
            (template-content (elacarte--get-content-from-disk template-file))
            (protocol-content (format template-content repo-name)))
-      (with-temp-file protocol-file
-        (insert protocol-content)))
+      (elacarte--write protocol-file
+                       protocol-content))
 
     ;; 3. Read the master list of recipes.
     (setq recipes (elacarte--read-data elacarte-recipes-file))
@@ -247,8 +252,8 @@ If REPO-NAME is nil, defaults to `elacarte-repo-name'."
       (let* ((recipe-id (car recipe))
              (package-name (if (symbolp recipe-id) (symbol-name recipe-id) recipe-id))
              (target-file (expand-file-name package-name recipes-dir)))
-        (with-temp-file target-file
-          (prin1 recipe (current-buffer)))))
+        (elacarte--write target-file
+                         (prin1-to-string recipe))))
 
     (message "Successfully built %d recipes and protocol file in %s"
              (length recipes)
