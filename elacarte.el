@@ -157,9 +157,10 @@ The file is created if it does not exist."
     (search-forward "\n\n") ; Skip HTTP headers
     (buffer-substring-no-properties (point) (point-max))))
 
-(defun elacarte--add-recipes-from-list (recipes replace noconfirm)
-  "Add RECIPES, prompting for confirmation unless NOCONFIRM is non-nil.
-REPLACE is passed to `elacarte-add-recipe'."
+(defun elacarte--add-recipes-from-list (recipes replace noconfirm visited-repos)
+  "Recursively add RECIPES, prompting unless NOCONFIRM.
+REPLACE is passed to `elacarte-add-recipe'.
+VISITED-REPOS is a hash-table to track processed packages."
   (let ((package-names (mapcar #'car recipes)))
     (when (or noconfirm
               (y-or-n-p
@@ -167,7 +168,11 @@ REPLACE is passed to `elacarte-add-recipe'."
                        (length recipes)
                        (mapconcat #'symbol-name package-names ", "))))
       (dolist (recipe recipes)
-        (elacarte-add-recipe recipe replace))
+        ;; 1. Add the recipe to the user's master file.
+        (elacarte-add-recipe recipe replace)
+        ;; 2. Recursively traverse this package's dependencies.
+        (elacarte--discover-recipes recipe replace noconfirm visited-repos))
+      ;; --- RECURSION STOP CONDITION 3: COMPLETED TRAVERSAL OF RECIPES FILE ---
       (message "Successfully processed %d recipes." (length recipes)))))
 
 (defun elacarte-add-recipes-by-file-url (url &optional replace noconfirm)
@@ -178,48 +183,117 @@ formatted like `elacarte-recipes-file'.
 
 Prompts for confirmation before adding unless NOCONFIRM is non-nil. If
 REPLACE is non-nil (or with a prefix argument interactively), existing
-recipes will be overwritten."
+recipes will be overwritten. This function will recursively discover
+and add recipes from all dependencies."
   (interactive (list (read-string "URL or file path: ") current-prefix-arg))
   (let* ((content (if (string-match-p "^https?://" url)
                       (elacarte--get-content-from-web url)
                     (elacarte--get-content-from-disk url)))
-         (recipes (car (read-from-string content))))
-    (elacarte--add-recipes-from-list recipes replace noconfirm)))
+         (recipes (car (read-from-string content)))
+         ;; Create the initial visited set for this session.
+         (visited-repos (make-hash-table :test 'equal)))
+    (elacarte--add-recipes-from-list recipes replace noconfirm visited-repos)))
 
-(defun elacarte-add-recipes-by-repo-url (url &optional replace)
+(defun elacarte--discover-recipes (recipe replace noconfirm visited-repos)
+  "A helper to clone the repo in RECIPE and add its recipes.
+This function is the recursive part of `elacarte-discover-recipes'.
+REPLACE, NOCONFIRM, and VISITED-REPOS are passed down the
+recursive chain."
+  (let ((package-name (symbol-name (car recipe))))
+    (message "Ensuring package repo for '%s' is available..." package-name)
+    ;; 1. Use straight.el to ensure the package is cloned.
+    ;; We create a true "clean room" by let-binding the base-dir
+    ;; and all of straight.el's in-memory caches.
+    (let ((straight-base-dir elacarte-temp-dir)
+          (straight-allow-recipe-inheritance nil)
+          (straight--success-cache (make-hash-table :test 'equal))
+          (straight--recipe-cache (make-hash-table :test 'equal))
+          (straight--repo-cache (make-hash-table :test 'equal))
+          (straight--profile-cache (make-hash-table :test 'equal)))
+      ;; This call has the side effect of cloning the repo AND
+      ;; registering the normalized recipe in the (temporary)
+      ;; `straight--recipe-cache`.
+      (straight-use-package-no-build recipe)
+
+      ;; Now, we retrieve the normalized recipe that straight.el just created.
+      (let* ((normalized-recipe (gethash package-name straight--recipe-cache))
+             ;; We get the *actual* :local-repo name from this recipe.
+             ;; This may be different from the package name.
+             ;; This is our unique repository identifier that we use
+             ;; to track "visited" repos during recipe discovery
+             (local-repo-name (plist-get normalized-recipe :local-repo))
+             (repo-path (straight--repos-dir local-repo-name))
+             (recipes-file (expand-file-name elacarte-recipes-filename repo-path)))
+
+        (if (gethash local-repo-name visited-repos)
+            ;; --- RECURSION STOP CONDITION 1: REPO ALREADY VISITED ---
+            (message "Repository '%s' already traversed. Skipping." local-repo-name)
+          ;; 1. Mark this repo as visited.
+          (puthash local-repo-name t visited-repos)
+
+          ;; 2. Check for the recipes.eld file.
+          (if (file-exists-p recipes-file)
+              ;; 3. Found a recipes file. Read it and continue the recursion.
+              (let* ((content (elacarte--get-content-from-disk recipes-file))
+                     (recipes (car (read-from-string content))))
+                (message "Found recipes in '%s', traversing..." package-name)
+                (elacarte--add-recipes-from-list recipes replace noconfirm visited-repos))
+            ;; --- RECURSION STOP CONDITION 2: NO RECIPES FILE ---
+            (message "No '%s' file found in '%s'. Stopping traversal."
+                     elacarte-recipes-filename package-name)))))))
+
+(defun elacarte-discover-recipes (recipe &optional replace noconfirm)
+  "Clone a package from RECIPE and recursively add its advertised recipes.
+RECIPE is a `straight.el`-style recipe. This function will
+clone the repository specified in the recipe, read its
+`recipes.eld` file, add the recipes found within, and then
+recursively do the same for all recipes found therein.
+
+RECIPE is only consulted to discover *where* to find valid package
+recipes, i.e., only fields like `:host` and `:repo`, etc., are
+required. It need not be a complete recipe for a package.
+
+This function is idempotent: it will not re-clone a repository
+that is already installed.
+
+Prompts for confirmation before adding unless NOCONFIRM is non-nil.
+If REPLACE is non-nil (or with a prefix argument
+interactively), existing recipes will be overwritten."
+  (interactive (list (car (read-from-string (read-from-minibuffer "Enter recipe: ")))
+                     current-prefix-arg
+                     nil)) ; `noconfirm` is nil when interactive
+
+  ;; 1. Create a new, empty hash table to track visited repositories
+  ;;    for this session.
+  (let ((visited-repos (make-hash-table :test 'equal)))
+    ;; 2. Start the traversal of recipes to discover
+    ;;    all relevant recipes. We do not add the initial recipe
+    ;;    to the master list, as it's just a pointer.
+    (elacarte--discover-recipes recipe replace noconfirm visited-repos)
+
+    ;; 3. Clean up the temporary clone directory *after* the
+    ;;    entire recursive process is complete.
+    (when (file-directory-p elacarte-temp-dir)
+      (delete-directory elacarte-temp-dir t)
+      (message "Cleaned up temporary repositories."))))
+
+(defun elacarte-add-recipes-by-repo-url (url &optional replace noconfirm)
   "Clone git repository from URL and add its advertised recipes.
+This is a convenience wrapper around `elacarte-discover-recipes'.
 
 URL can be a remote URL or a local file path (including `~/`).
-The repository is cloned to a temporary location and deleted
-after the operation.
+It attempts to create a simple recipe from the URL.
 
-Prompts for confirmation before adding. If REPLACE is non-nil
-(or with a prefix argument interactively), existing recipes
-will be overwritten."
-  (interactive (list (read-string "Repository URL or local path: ") current-prefix-arg))
-  (make-directory elacarte-temp-dir t)
-  (let* ((expanded-url (if (or (string-prefix-p "/" url)
-                               (string-prefix-p "~" url))
-                           (expand-file-name url)
-                         url))
-         (repo-name (file-name-nondirectory (file-name-sans-extension expanded-url)))
-         (clone-dir (expand-file-name repo-name elacarte-temp-dir)))
-    (unwind-protect
-        (progn
-          (message "Cloning repository from %s..." expanded-url)
-          (unless (zerop (call-process "git" nil nil nil "clone" expanded-url clone-dir))
-            (user-error "Failed to clone repository: %s" expanded-url))
-          (message "Cloning complete.")
-
-          (let* ((recipes-file (expand-file-name elacarte-recipes-filename
-                                                 clone-dir)))
-            (unless (file-exists-p recipes-file)
-              (user-error "No recipes file found in repository root."))
-            (elacarte-add-recipes-by-file-url recipes-file replace)))
-      ;; Cleanup: delete the temporary repository.
-      (when (file-directory-p clone-dir)
-        (delete-directory clone-dir t)
-        (message "Cleaned up temporary repository: %s" clone-dir)))))
+Prompts for confirmation before adding unless NOCONFIRM is non-nil.
+If REPLACE is non-nil (or with a prefix argument
+interactively), existing recipes will be overwritten."
+  (interactive (list (read-string "Repository URL or local path: ")
+                     current-prefix-arg
+                     nil))
+  (let* ((repo-name (intern (file-name-nondirectory (file-name-sans-extension url))))
+         ;; Create a minimal recipe to pass to the main function.
+         (recipe `(,repo-name :repo ,url)))
+    (elacarte-discover-recipes recipe replace noconfirm)))
 
 (defun elacarte-build-recipe-repository (&optional repo-name)
   "Build the local recipe repository from `elacarte-recipes-file'.
