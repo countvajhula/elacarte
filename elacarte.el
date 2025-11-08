@@ -150,13 +150,6 @@ The file is created if it does not exist."
     (insert-file-contents-literally file-path)
     (buffer-string)))
 
-(defun elacarte--get-content-from-web (url)
-  "Return content of URL as a string."
-  (with-current-buffer (url-retrieve-synchronously url)
-    (goto-char (point-min))
-    (search-forward "\n\n") ; Skip HTTP headers
-    (buffer-substring-no-properties (point) (point-max))))
-
 (defun elacarte--add-recipes-from-list (recipes replace noconfirm visited-repos)
   "Recursively add RECIPES, prompting unless NOCONFIRM.
 REPLACE is passed to `elacarte-add-recipe'.
@@ -174,25 +167,6 @@ VISITED-REPOS is a hash-table to track processed packages."
         (elacarte--discover-recipes recipe replace noconfirm visited-repos))
       ;; --- RECURSION STOP CONDITION 3: COMPLETED TRAVERSAL OF RECIPES FILE ---
       (message "Successfully processed %d recipes." (length recipes)))))
-
-(defun elacarte-add-recipes-by-file-url (url &optional replace noconfirm)
-  "Fetch recipes from URL and add them to `elacarte-recipes-file'.
-
-URL can be a local file path or a web URL pointing to a file
-formatted like `elacarte-recipes-file'.
-
-Prompts for confirmation before adding unless NOCONFIRM is non-nil. If
-REPLACE is non-nil (or with a prefix argument interactively), existing
-recipes will be overwritten. This function will recursively discover
-and add recipes from all dependencies."
-  (interactive (list (read-string "URL or file path: ") current-prefix-arg))
-  (let* ((content (if (string-match-p "^https?://" url)
-                      (elacarte--get-content-from-web url)
-                    (elacarte--get-content-from-disk url)))
-         (recipes (car (read-from-string content)))
-         ;; Create the initial visited set for this session.
-         (visited-repos (make-hash-table :test 'equal)))
-    (elacarte--add-recipes-from-list recipes replace noconfirm visited-repos)))
 
 (defun elacarte--discover-recipes (recipe replace noconfirm visited-repos)
   "A helper to clone the repo in RECIPE and add its recipes.
