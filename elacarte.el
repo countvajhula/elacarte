@@ -95,7 +95,7 @@ would house the user's curated and preferred recipes.")
                          (elacarte--pretty-print updated-recipes))
         (message "Recipe for '%s' removed." package-name)))))
 
-(defun elacarte-add-recipe (recipe &optional replace)
+(defun elacarte-add-recipe (recipe &optional replace auto)
   "Add or update RECIPE in `elacarte-recipes-file'.
 
 When called interactively, prompts for the recipe as a Lisp expression.
@@ -103,15 +103,31 @@ If a recipe for the same package already exists, it is
 replaced only if a prefix argument is provided (in Lisp, if
 REPLACE is non-nil). Otherwise, an error is signaled.
 
+If AUTO is set, the recipe gains an `:auto t` property. This tells
+Elacarte that this is a recipe it should automatically manage,
+including overwriting it if it is updated in the project source
+repository. Typically, for canonical recipes that are advertised by
+the project repo, this should be non-nil. For bespoke recipes added
+manually by the user, this should be nil.
+
 The file is created if it does not exist."
   (interactive (list (read-from-minibuffer "Enter recipe: ") current-prefix-arg))
 
   (let* (;; When called interactively, RECIPE is a string. We must parse it.
          ;; `read-from-string` returns (OBJECT . CHARS-READ), so we take the CAR.
          (recipe (if (stringp recipe) (car (read-from-string recipe)) recipe))
+         ;; recipes added by elacarte are managed automatically
+         ;; we mark these out in the recipes file to distinguish
+         ;; them from bespoke recipes added by the user
          (package-name (car recipe))
          (existing-recipes nil)
-         (old-recipe nil))
+         (old-recipe nil)
+         (old-auto nil))
+
+    (when auto
+      (setq recipe
+            (cons (car recipe)
+                  (plist-put (cdr recipe) :auto t))))
 
     ;; 1. Read existing recipes, creating the file if it's missing.
     (unless (file-exists-p elacarte-recipes-file)
@@ -123,24 +139,28 @@ The file is created if it does not exist."
 
     ;; Check if a recipe for this package already exists.
     (setq old-recipe (assoc package-name existing-recipes))
+    (setq old-auto (plist-get (cdr old-recipe) :auto))
 
-    ;; 2. If the recipe exists and `replace` is nil, signal an error.
-    (when (and old-recipe (not replace))
-      (user-error "Recipe for '%s' already exists. Use a prefix argument to replace it." package-name))
+    ;; 2. If the recipe exists and `replace` is nil, and it isn't an
+    ;; automatically maintained (i.e., by Elacarte) recipe, then
+    ;; signal an error.
+    (if (and old-recipe (not old-auto) (not replace))
+        ;; do nothing for this recipe
+        (warn "Recipe for '%s' already exists. Use a prefix argument to replace it." package-name)
 
-    ;; 3. Remove any old recipe for the same package to handle updates.
-    (let ((updated-recipes (elacarte--remove-recipe package-name
-                                                    existing-recipes)))
+      ;; 3. Remove any old recipe for the same package to handle updates.
+      (let ((updated-recipes (elacarte--remove-recipe package-name
+                                                      existing-recipes)))
 
-      ;; 4. Add the new recipe to the front and write back to disk.
-      (elacarte--write elacarte-recipes-file
-                       (elacarte--pretty-print
-                        (cons recipe updated-recipes))))
+        ;; 4. Add the new recipe to the front and write back to disk.
+        (elacarte--write elacarte-recipes-file
+                         (elacarte--pretty-print
+                          (cons recipe updated-recipes))))
 
-    (message "Recipe for '%s' %s %s"
-             package-name
-             (if old-recipe "updated in" "added to")
-             (file-name-nondirectory elacarte-recipes-file))))
+      (message "Recipe for '%s' %s %s"
+               package-name
+               (if old-recipe "updated in" "added to")
+               (file-name-nondirectory elacarte-recipes-file)))))
 
 (defun elacarte--get-content-from-disk (file-path)
   "Return content of FILE-PATH as a string."
@@ -150,8 +170,23 @@ The file is created if it does not exist."
     (insert-file-contents-literally file-path)
     (buffer-string)))
 
-(defun elacarte--add-recipes-from-list (recipes replace noconfirm visited-repos)
+(defun elacarte--add-recipes-from-list (recipes current-repo-name replace noconfirm visited-repos)
   "Recursively add RECIPES, prompting unless NOCONFIRM.
+This function implements the core logic to traverse and add recipes,
+which distinguishes two types of recipe:
+  1. Primary recipes, which refer to the source repo itself
+  2. Pointer recipes, which refer to dependencies in other repos
+
+Each repo is only responsible for providing correct and complete
+recipes for *primary* recipes. The secondary, pointer recipes are only
+consulted to discover the location of the next repo whose advertised
+recipes will be traversed. Of course, these upstream repos are
+similarly responsible for *their* primary recipes, which will be added
+when they are encountered there.
+
+CURRENT-REPO-NAME is the :local-repo string of the repository we are
+currently scanning, which uniquely identifies the repository for our
+purposes.
 REPLACE is passed to `elacarte-add-recipe'.
 VISITED-REPOS is a hash-table to track processed packages."
   (let ((package-names (mapcar #'car recipes)))
@@ -161,10 +196,20 @@ VISITED-REPOS is a hash-table to track processed packages."
                        (length recipes)
                        (mapconcat #'symbol-name package-names ", "))))
       (dolist (recipe recipes)
-        ;; 1. Add the recipe to the user's master file.
-        (elacarte-add-recipe recipe replace)
-        ;; 2. Recursively traverse this package's dependencies.
-        (elacarte--discover-recipes recipe replace noconfirm visited-repos))
+        (let ((package-name (symbol-name (car recipe))))
+          ;; We must run a "clean room" check for *every* recipe
+          ;; to find out what its :local-repo is.
+          ;; Ensure the recipe is installed (idempotent)
+          (straight-use-package-no-build recipe)
+          (let* ((normalized-recipe (gethash package-name straight--recipe-cache))
+                 (recipe-local-repo (plist-get normalized-recipe :local-repo)))
+            ;; Compare the recipe's repo with the repo we are currently in.
+            (if (equal recipe-local-repo current-repo-name)
+                (progn
+                  (message "  -> Adding primary recipe for '%s'" package-name)
+                  (elacarte-add-recipe recipe replace :auto))
+              (message "  -> Found pointer recipe for '%s', traversing..." package-name)
+              (elacarte--discover-recipes recipe replace noconfirm visited-repos)))))
       ;; --- RECURSION STOP CONDITION 3: COMPLETED TRAVERSAL OF RECIPES FILE ---
       (message "Successfully processed %d recipes." (length recipes)))))
 
@@ -172,7 +217,11 @@ VISITED-REPOS is a hash-table to track processed packages."
   "A helper to clone the repo in RECIPE and add its recipes.
 This function is the recursive part of `elacarte-discover-recipes'.
 REPLACE, NOCONFIRM, and VISITED-REPOS are passed down the
-recursive chain."
+recursive chain.
+
+RECIPE itself is considered to be only a pointer - it need not be a
+complete recipe, just, sufficient to locate the source repository
+where its advertised recipes may be discovered."
   (let ((package-name (symbol-name (car recipe))))
     (message "Ensuring package repo for '%s' is available..." package-name)
     ;; 1. Use straight.el to ensure the package is cloned.
@@ -211,7 +260,13 @@ recursive chain."
               (let* ((content (elacarte--get-content-from-disk recipes-file))
                      (recipes (car (read-from-string content))))
                 (message "Found recipes in '%s', traversing..." package-name)
-                (elacarte--add-recipes-from-list recipes replace noconfirm visited-repos))
+                ;; Pass the local-repo-name we just found as the "current"
+                ;; repo name for the next step.
+                (elacarte--add-recipes-from-list recipes
+                                                 local-repo-name
+                                                 replace
+                                                 noconfirm
+                                                 visited-repos))
             ;; --- RECURSION STOP CONDITION 2: NO RECIPES FILE ---
             (message "No '%s' file found in '%s'. Stopping traversal."
                      elacarte-recipes-filename package-name)))))))
