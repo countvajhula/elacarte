@@ -119,7 +119,12 @@ the project repo, this should be non-nil. For bespoke recipes added
 manually by the user, this should be nil.
 
 The file is created if it does not exist."
-  (interactive (list (read-from-minibuffer "Enter recipe: ") current-prefix-arg))
+  (interactive (list (read-from-minibuffer "Enter recipe: ")
+                     current-prefix-arg
+                     ;; auto is nil when called interactively, i.e.,
+                     ;; this recipe is managed by the user, not by
+                     ;; Elacarte
+                     nil))
 
   (let* (;; When called interactively, RECIPE is a string. We must parse it.
          ;; `read-from-string` returns (OBJECT . CHARS-READ), so we take the CAR.
