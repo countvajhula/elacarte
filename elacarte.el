@@ -55,6 +55,14 @@ would house the user's curated and preferred recipes.")
   (expand-file-name "tmp" elacarte-base-dir)
   "Temporary directory for `elacarte` operations, like cloning repos.")
 
+(defun elacarte--get-content-from-disk (file-path)
+  "Return content of FILE-PATH as a string."
+  (unless (file-exists-p file-path)
+    (user-error "File not found: %s" file-path))
+  (with-temp-buffer
+    (insert-file-contents-literally file-path)
+    (buffer-string)))
+
 (defun elacarte--read-data (file)
   "Read a Lisp datum from FILE."
   (car
@@ -162,15 +170,7 @@ The file is created if it does not exist."
                (if old-recipe "updated in" "added to")
                (file-name-nondirectory elacarte-recipes-file)))))
 
-(defun elacarte--get-content-from-disk (file-path)
-  "Return content of FILE-PATH as a string."
-  (unless (file-exists-p file-path)
-    (user-error "File not found: %s" file-path))
-  (with-temp-buffer
-    (insert-file-contents-literally file-path)
-    (buffer-string)))
-
-(defun elacarte--add-recipes-from-list (recipes current-repo-name replace noconfirm visited-repos)
+(defun elacarte--add-list-of-recipes (recipes current-repo-name replace noconfirm visited-repos)
   "Recursively add RECIPES, prompting unless NOCONFIRM.
 This function implements the core logic to traverse and add recipes,
 which distinguishes two types of recipe:
@@ -262,11 +262,11 @@ where its advertised recipes may be discovered."
                 (message "Found recipes in '%s', traversing..." package-name)
                 ;; Pass the local-repo-name we just found as the "current"
                 ;; repo name for the next step.
-                (elacarte--add-recipes-from-list recipes
-                                                 local-repo-name
-                                                 replace
-                                                 noconfirm
-                                                 visited-repos))
+                (elacarte--add-list-of-recipes recipes
+                                               local-repo-name
+                                               replace
+                                               noconfirm
+                                               visited-repos))
             ;; --- RECURSION STOP CONDITION 2: NO RECIPES FILE ---
             (message "No '%s' file found in '%s'. Stopping traversal."
                      elacarte-recipes-filename package-name)))))))
@@ -306,7 +306,7 @@ interactively), existing recipes will be overwritten."
       (delete-directory elacarte-temp-dir t)
       (message "Cleaned up temporary repositories."))))
 
-(defun elacarte-add-recipes-by-repo-url (url &optional replace noconfirm)
+(defun elacarte-discover-recipes-by-url (url &optional replace noconfirm)
   "Clone git repository from URL and add its advertised recipes.
 This is a convenience wrapper around `elacarte-discover-recipes'.
 
