@@ -285,9 +285,12 @@ clone the repository specified in the recipe, read its
 `recipes.eld` file, add the recipes found within, and then
 recursively do the same for all recipes found therein.
 
-RECIPE is only consulted to discover *where* to find valid package
-recipes, i.e., only fields like `:host` and `:repo`, etc., are
-required. It need not be a complete recipe for a package.
+RECIPE itself is treated as a *pointer* and is only consulted to
+discover *where* to find valid package recipes. It is not itself added
+to `elacarte-recipes-file'. Therefore, only fields like `:host` and
+`:repo`, etc., are required, and it need not be a complete recipe for
+a package. The pointed-to repo is expected to advertise those in its
+`recipes.eld`.
 
 This function is idempotent: it will not re-clone a repository
 that is already installed.
@@ -301,7 +304,7 @@ interactively), existing recipes will be overwritten."
                      nil
                      ;; `notraverse` is nil when interactive
                      nil))
-
+  (message "Discovering recipes for %S" recipe)
   ;; 1. Create a new, empty hash table to track visited repositories
   ;;    for this session.
   (let ((visited-repos (make-hash-table :test 'equal)))
@@ -332,7 +335,13 @@ interactively), existing recipes will be overwritten."
                      ;; when interactive
                      nil
                      nil))
-  (let* ((repo-name (intern (file-name-nondirectory (file-name-sans-extension url))))
+  (let* ((normalized-url (if (or (string-prefix-p "/" url) (string-prefix-p "~" url))
+                             ;; For local paths, expand and remove trailing slashes.
+                             (directory-file-name (expand-file-name url))
+                           ;; For remote URLs, just use as-is.
+                           url))
+         (basename (file-name-nondirectory (file-name-sans-extension normalized-url)))
+         (repo-name (intern basename))
          ;; Create a minimal recipe to pass to the main function.
          (recipe `(,repo-name :repo ,url)))
     (elacarte-discover-recipes recipe replace noconfirm notraverse)))
