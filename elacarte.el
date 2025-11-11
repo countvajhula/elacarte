@@ -231,19 +231,19 @@ VISITED-REPOS is a hash-table to track processed packages."
                          (length recipes)
                          (mapconcat #'symbol-name package-names ", "))))
         (dolist (recipe recipes)
-          (let ((package-name (symbol-name (car recipe))))
-            ;; We must run a "clean room" check for *every* recipe
-            ;; to find out what its :local-repo is.
-            (let* ((normalized-recipe (elacarte--install-clean-room recipe))
-                   (recipe-local-repo (plist-get normalized-recipe :local-repo)))
-              ;; Compare the recipe's repo with the repo we are currently in.
-              (if (equal recipe-local-repo current-repo-name)
-                  (progn
-                    (message "  -> Adding primary recipe for '%s'" package-name)
-                    (elacarte-add-recipe recipe replace :auto))
-                (unless notraverse
-                  (message "  -> Found pointer recipe for '%s', traversing..." package-name)
-                  (elacarte--discover-recipes recipe replace noconfirm notraverse visited-repos))))))
+          (let* ((package-name (symbol-name (car recipe)))
+                 ;; We must run a "clean room" check for *every* recipe
+                 ;; to find out what its :local-repo is.
+                 (normalized-recipe (elacarte--install-clean-room recipe))
+                 (recipe-local-repo (plist-get normalized-recipe :local-repo)))
+            ;; Compare the recipe's repo with the repo we are currently in.
+            (if (equal recipe-local-repo current-repo-name)
+                (progn
+                  (message "  -> Adding primary recipe for '%s'" package-name)
+                  (elacarte-add-recipe recipe replace :auto))
+              (unless notraverse
+                (message "  -> Found pointer recipe for '%s', traversing..." package-name)
+                (elacarte--discover-recipes recipe replace noconfirm notraverse visited-repos)))))
         ;; --- RECURSION STOP CONDITION 3: COMPLETED TRAVERSAL OF RECIPES FILE ---
         (message "Successfully processed %d recipes." (length recipes))))))
 
@@ -440,7 +440,7 @@ This function is intended to be run from the
                (recipes-file (expand-file-name elacarte-recipes-filename repo-path)))
           ;; 3. Add all primary recipes (don't traverse) from the repo's recipes.eld
           (elacarte-discover-recipes-from-file recipes-file
-                                               current-repo-name
+                                               local-repo-name
                                                nil  ; don't replace bespoke recipes
                                                :noconfirm ; don't ask for confirmation
                                                ;; and, mainly, don't traverse into pointer recipes
