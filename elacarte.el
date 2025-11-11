@@ -418,6 +418,36 @@ Interactively, also uses the value of `elacarte-repo-name'."
       (message "--- '%s' registration complete ---" repo-name))))
 
 
+(defun elacarte-update-recipe (package-name)
+  "Update the recipe for PACKAGE-NAME from its source repo.
+This function is intended to be run from the
+`straight-use-package-pre-build-functions' hook."
+  (message "Elacarte: Checking for recipe updates for '%s'..." package-name)
+
+  ;; 1. Get the recipe from the *current* Emacs session (not a clean room).
+  (let* ((recipe (gethash package-name straight--recipe-cache)))
+    (if recipe
+        ;; 2. Get the *true* :local-repo name from that recipe.
+        (let* ((local-repo-name (plist-get recipe :local-repo))
+               (repo-path (straight--repos-dir local-repo-name)))
+          (elacarte-discover-recipes-by-url repo-path
+                                            nil  ; don't replace bespoke recipes
+                                            :noconfirm ; don't ask for confirmation
+                                            ;; and, mainly, don't traverse into pointer recipes
+                                            :notraverse))
+      (warn "elacarte-update-recipe: No recipe found for '%s'" package-name))))
+
+(defun elacarte-activate ()
+  "Hook into Straight, ensuring that recipes are updated before packages are built."
+  (add-hook 'straight-use-package-pre-build-functions
+            #'elacarte-update-recipe))
+
+(defun elacarte-deactivate ()
+  "Hook into Straight, ensuring that recipes are updated before packages are built."
+  (remove-hook 'straight-use-package-pre-build-functions
+               #'elacarte-update-recipe))
+
+
 (provide 'elacarte)
 
 ;;; elacarte.el ends here
