@@ -175,8 +175,33 @@ The file is created if it does not exist."
                (if old-recipe "updated in" "added to")
                (file-name-nondirectory elacarte-recipes-file)))))
 
-(defun elacarte--add-list-of-recipes (recipes current-repo-name replace noconfirm notraverse visited-repos)
-  "Recursively add RECIPES, prompting unless NOCONFIRM.
+(defun elacarte--install-clean-room (recipe)
+  "Install RECIPE in a clean room environment.
+
+Return the normalized recipe that contains details of the actual
+installation such as the location of the :local-repo."
+  ;; We create a true "clean room" by let-binding the base-dir
+  ;; and all of straight.el's in-memory caches.
+  (let ((package-name (symbol-name (car recipe)))
+        (straight-base-dir elacarte-temp-dir)
+        (straight-allow-recipe-inheritance nil)
+        (straight--success-cache (make-hash-table :test 'equal))
+        (straight--recipe-cache (make-hash-table :test 'equal))
+        (straight--repo-cache (make-hash-table :test 'equal))
+        (straight--profile-cache (make-hash-table :test 'equal)))
+    (message "Ensuring package repo for '%s' is available (clean room)..." package-name)
+    ;; Ensure the recipe is installed (idempotent)
+    ;; This call has the side effect of cloning the repo AND
+    ;; registering the normalized recipe in the (temporary)
+    ;; `straight--recipe-cache`.
+    (straight-use-package-no-build recipe)
+    ;; Return the normalized recipe that straight.el just created,
+    ;; which contains details of the actual installation such as
+    ;; the :local-repo for the package.
+    (gethash package-name straight--recipe-cache)))
+
+(defun elacarte-discover-recipes-from-file (recipes-file current-repo-name replace noconfirm notraverse visited-repos)
+  "Recursively add recipes starting from RECIPE-FILE, prompting unless NOCONFIRM.
 This function implements the core logic to traverse and add recipes,
 which distinguishes two types of recipe:
   1. Primary recipes, which refer to the source repo itself
@@ -194,30 +219,33 @@ currently scanning, which uniquely identifies the repository for our
 purposes.
 REPLACE is passed to `elacarte-add-recipe'.
 VISITED-REPOS is a hash-table to track processed packages."
-  (let ((package-names (mapcar #'car recipes)))
-    (when (or noconfirm
-              (y-or-n-p
-               (format "The following %d recipes will be added. Proceed?\n%s"
-                       (length recipes)
-                       (mapconcat #'symbol-name package-names ", "))))
-      (dolist (recipe recipes)
-        (let ((package-name (symbol-name (car recipe))))
-          ;; We must run a "clean room" check for *every* recipe
-          ;; to find out what its :local-repo is.
-          ;; Ensure the recipe is installed (idempotent)
-          (straight-use-package-no-build recipe)
-          (let* ((normalized-recipe (gethash package-name straight--recipe-cache))
-                 (recipe-local-repo (plist-get normalized-recipe :local-repo)))
-            ;; Compare the recipe's repo with the repo we are currently in.
-            (if (equal recipe-local-repo current-repo-name)
-                (progn
-                  (message "  -> Adding primary recipe for '%s'" package-name)
-                  (elacarte-add-recipe recipe replace :auto))
-              (unless notraverse
-                (message "  -> Found pointer recipe for '%s', traversing..." package-name)
-                (elacarte--discover-recipes recipe replace noconfirm notraverse visited-repos))))))
-      ;; --- RECURSION STOP CONDITION 3: COMPLETED TRAVERSAL OF RECIPES FILE ---
-      (message "Successfully processed %d recipes." (length recipes)))))
+  (let* ((content (elacarte--get-content-from-disk recipes-file))
+         (recipes (car (read-from-string content))))
+    (message "Found recipes in '%s', traversing..." current-repo-name)
+    ;; Pass the local-repo-name we just found as the "current"
+    ;; repo name for the next step.
+    (let ((package-names (mapcar #'car recipes)))
+      (when (or noconfirm
+                (y-or-n-p
+                 (format "The following %d recipes will be added. Proceed?\n%s"
+                         (length recipes)
+                         (mapconcat #'symbol-name package-names ", "))))
+        (dolist (recipe recipes)
+          (let ((package-name (symbol-name (car recipe))))
+            ;; We must run a "clean room" check for *every* recipe
+            ;; to find out what its :local-repo is.
+            (let* ((normalized-recipe (elacarte--install-clean-room recipe))
+                   (recipe-local-repo (plist-get normalized-recipe :local-repo)))
+              ;; Compare the recipe's repo with the repo we are currently in.
+              (if (equal recipe-local-repo current-repo-name)
+                  (progn
+                    (message "  -> Adding primary recipe for '%s'" package-name)
+                    (elacarte-add-recipe recipe replace :auto))
+                (unless notraverse
+                  (message "  -> Found pointer recipe for '%s', traversing..." package-name)
+                  (elacarte--discover-recipes recipe replace noconfirm notraverse visited-repos))))))
+        ;; --- RECURSION STOP CONDITION 3: COMPLETED TRAVERSAL OF RECIPES FILE ---
+        (message "Successfully processed %d recipes." (length recipes))))))
 
 (defun elacarte--discover-recipes (recipe replace noconfirm notraverse visited-repos)
   "A helper to clone the repo in RECIPE and add its recipes.
@@ -228,55 +256,35 @@ recursive chain.
 RECIPE itself is considered to be only a pointer - it need not be a
 complete recipe, just, sufficient to locate the source repository
 where its advertised recipes may be discovered."
-  (let ((package-name (symbol-name (car recipe))))
-    (message "Ensuring package repo for '%s' is available..." package-name)
-    ;; 1. Use straight.el to ensure the package is cloned.
-    ;; We create a true "clean room" by let-binding the base-dir
-    ;; and all of straight.el's in-memory caches.
-    (let ((straight-base-dir elacarte-temp-dir)
-          (straight-allow-recipe-inheritance nil)
-          (straight--success-cache (make-hash-table :test 'equal))
-          (straight--recipe-cache (make-hash-table :test 'equal))
-          (straight--repo-cache (make-hash-table :test 'equal))
-          (straight--profile-cache (make-hash-table :test 'equal)))
-      ;; This call has the side effect of cloning the repo AND
-      ;; registering the normalized recipe in the (temporary)
-      ;; `straight--recipe-cache`.
-      (straight-use-package-no-build recipe)
+  ;; 1. Use straight.el to ensure the package repo is cloned
+  ;; in a "clean room" environment, and obtain the "normalized" recipe
+  ;; for that specific installation.
+  (let* ((normalized-recipe (elacarte--install-clean-room recipe))
+         ;; We get the *actual* :local-repo name from this recipe.
+         ;; This may be different from the package name.
+         ;; This is our unique repository identifier that we use
+         ;; to track "visited" repos during recipe discovery
+         (local-repo-name (plist-get normalized-recipe :local-repo))
+         (repo-path (straight--repos-dir local-repo-name))
+         (recipes-file (expand-file-name elacarte-recipes-filename repo-path)))
+    (if (gethash local-repo-name visited-repos)
+        ;; --- RECURSION STOP CONDITION 1: REPO ALREADY VISITED ---
+        (message "Repository '%s' already traversed. Skipping." local-repo-name)
+      ;; 1. Mark this repo as visited.
+      (puthash local-repo-name t visited-repos)
 
-      ;; Now, we retrieve the normalized recipe that straight.el just created.
-      (let* ((normalized-recipe (gethash package-name straight--recipe-cache))
-             ;; We get the *actual* :local-repo name from this recipe.
-             ;; This may be different from the package name.
-             ;; This is our unique repository identifier that we use
-             ;; to track "visited" repos during recipe discovery
-             (local-repo-name (plist-get normalized-recipe :local-repo))
-             (repo-path (straight--repos-dir local-repo-name))
-             (recipes-file (expand-file-name elacarte-recipes-filename repo-path)))
-
-        (if (gethash local-repo-name visited-repos)
-            ;; --- RECURSION STOP CONDITION 1: REPO ALREADY VISITED ---
-            (message "Repository '%s' already traversed. Skipping." local-repo-name)
-          ;; 1. Mark this repo as visited.
-          (puthash local-repo-name t visited-repos)
-
-          ;; 2. Check for the recipes.eld file.
-          (if (file-exists-p recipes-file)
-              ;; 3. Found a recipes file. Read it and continue the recursion.
-              (let* ((content (elacarte--get-content-from-disk recipes-file))
-                     (recipes (car (read-from-string content))))
-                (message "Found recipes in '%s', traversing..." package-name)
-                ;; Pass the local-repo-name we just found as the "current"
-                ;; repo name for the next step.
-                (elacarte--add-list-of-recipes recipes
+      ;; 2. Check for the recipes.eld file.
+      (if (file-exists-p recipes-file)
+          ;; 3. Found a recipes file. Read it and continue the recursion.
+          (elacarte-discover-recipes-from-file recipes-file
                                                local-repo-name
                                                replace
                                                noconfirm
                                                notraverse
-                                               visited-repos))
-            ;; --- RECURSION STOP CONDITION 2: NO RECIPES FILE ---
-            (message "No '%s' file found in '%s'. Stopping traversal."
-                     elacarte-recipes-filename package-name)))))))
+                                               visited-repos)
+        ;; --- RECURSION STOP CONDITION 2: NO RECIPES FILE ---
+        (message "No '%s' file found in '%s'. Stopping traversal."
+                 elacarte-recipes-filename local-repo-name)))))
 
 (defun elacarte-discover-recipes (recipe &optional replace noconfirm notraverse)
   "Clone a package from RECIPE and recursively add its advertised recipes.
@@ -417,7 +425,6 @@ Interactively, also uses the value of `elacarte-repo-name'."
 
       (message "--- '%s' registration complete ---" repo-name))))
 
-
 (defun elacarte-update-recipe (package-name)
   "Update the recipe for PACKAGE-NAME from its source repo.
 This function is intended to be run from the
@@ -425,16 +432,21 @@ This function is intended to be run from the
   (message "Elacarte: Checking for recipe updates for '%s'..." package-name)
 
   ;; 1. Get the recipe from the *current* Emacs session (not a clean room).
-  (let* ((recipe (gethash package-name straight--recipe-cache)))
+  (let ((recipe (gethash package-name straight--recipe-cache)))
     (if recipe
         ;; 2. Get the *true* :local-repo name from that recipe.
         (let* ((local-repo-name (plist-get recipe :local-repo))
-               (repo-path (straight--repos-dir local-repo-name)))
-          (elacarte-discover-recipes-by-url repo-path
-                                            nil  ; don't replace bespoke recipes
-                                            :noconfirm ; don't ask for confirmation
-                                            ;; and, mainly, don't traverse into pointer recipes
-                                            :notraverse))
+               (repo-path (straight--repos-dir local-repo-name))
+               (recipes-file (expand-file-name elacarte-recipes-filename repo-path)))
+          ;; 3. Add all primary recipes (don't traverse) from the repo's recipes.eld
+          (elacarte-discover-recipes-from-file recipes-file
+                                               current-repo-name
+                                               nil  ; don't replace bespoke recipes
+                                               :noconfirm ; don't ask for confirmation
+                                               ;; and, mainly, don't traverse into pointer recipes
+                                               :notraverse
+                                               ;; this won't be used anyway
+                                               (make-hash-table :test 'equal)))
       (warn "elacarte-update-recipe: No recipe found for '%s'" package-name))))
 
 (defun elacarte-activate ()
