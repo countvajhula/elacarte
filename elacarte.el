@@ -439,14 +439,17 @@ This function is intended to be run from the
                (repo-path (straight--repos-dir local-repo-name))
                (recipes-file (expand-file-name elacarte-recipes-filename repo-path)))
           ;; 3. Add all primary recipes (don't traverse) from the repo's recipes.eld
-          (elacarte-discover-recipes-from-file recipes-file
-                                               local-repo-name
-                                               nil  ; don't replace bespoke recipes
-                                               :noconfirm ; don't ask for confirmation
-                                               ;; and, mainly, don't traverse into pointer recipes
-                                               :notraverse
-                                               ;; this won't be used anyway
-                                               (make-hash-table :test 'equal)))
+          (if (file-exists-p recipes-file)
+              (elacarte-discover-recipes-from-file recipes-file
+                                                   local-repo-name
+                                                   nil  ; don't replace bespoke recipes
+                                                   :noconfirm ; don't ask for confirmation
+                                                   ;; and, mainly, don't traverse into pointer recipes
+                                                   :notraverse
+                                                   ;; this won't be used anyway
+                                                   (make-hash-table :test 'equal))
+            (message "No '%s' file found in '%s'."
+                     elacarte-recipes-filename local-repo-name)))
       (warn "elacarte-update-recipe: No recipe found for '%s'" package-name))))
 
 (defun elacarte-activate ()
