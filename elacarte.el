@@ -34,7 +34,7 @@
   (expand-file-name "elacarte" user-emacs-directory)
   "The base path for elacarte operations.")
 
-(defvar elacarte-repo-name "xelpa"
+(defvar elacarte-repo-name "elacarte-cookbook"
   "The name of the local recipe repository to be built.")
 
 (defvar elacarte-recipes-filename "recipes.eld"
@@ -355,49 +355,33 @@ interactively), existing recipes will be overwritten."
     (elacarte-discover-recipes recipe replace noconfirm notraverse)))
 
 (defun elacarte-build-recipe-repository (&optional repo-name)
-  "Build the local recipe repository from `elacarte-recipes-file'.
-This parses the master recipe list and generates the individual
-recipe files and the necessary protocol implementation file in
-the `elacarte-base-dir'.
+  "Create a local recipe repository serving recipes from `elacarte-recipes-file'.
+This simply generates the necessary protocol implementation file in
+the `elacarte-base-dir' that serves recipes from the master recipe list.
 If REPO-NAME is nil, defaults to `elacarte-repo-name'."
   (interactive)
   (let* ((repo-name (or repo-name elacarte-repo-name))
-         (repo-dir (expand-file-name repo-name elacarte-base-dir))
-         (recipes-dir (expand-file-name "recipes" repo-dir))
-         (protocol-file (expand-file-name (concat repo-name ".el") repo-dir))
-         (recipes nil))
+         (protocol-file (expand-file-name (concat repo-name ".el")
+                                          elacarte-base-dir)))
     (unless (file-exists-p elacarte-recipes-file)
       (user-error "Recipes file not found: %s" elacarte-recipes-file))
 
     (message "Building '%s' recipe repository..." repo-name)
 
-    ;; 1. Clean and create the target directories.
-    (when (file-directory-p repo-dir)
-      (delete-directory repo-dir 'recursive))
-    (make-directory recipes-dir 'parents)
-
-    ;; 2. Generate and write the recipe protocol implementation file from the template.
     (let* ((template-file (expand-file-name "recipe-repo.el.template"
                                             (file-name-directory (locate-library "elacarte"))))
            (template-content (elacarte--get-content-from-disk template-file))
-           (protocol-content (format template-content repo-name)))
+           (protocol-content (format template-content
+                                     repo-name
+                                     elacarte-recipes-file)))
       (elacarte--write protocol-file
                        protocol-content))
 
-    ;; 3. Read the master list of recipes.
-    (setq recipes (elacarte--read-data elacarte-recipes-file))
-
-    ;; 4. Write each recipe to its own file.
-    (dolist (recipe recipes)
-      (let* ((recipe-id (car recipe))
-             (package-name (if (symbolp recipe-id) (symbol-name recipe-id) recipe-id))
-             (target-file (expand-file-name package-name recipes-dir)))
-        (elacarte--write target-file
-                         (prin1-to-string recipe))))
-
-    (message "Successfully built %d recipes and protocol file in %s"
-             (length recipes)
-             repo-dir)))
+    (let ((recipes (elacarte--read-data elacarte-recipes-file)))
+      (message "Successfully built recipe repository %s serving %d recipes from %s"
+               protocol-file
+               (length recipes)
+               elacarte-recipes-file))))
 
 (defun elacarte-register-recipe-repository (&optional repo-name)
   "Register the local recipe repository REPO-NAME with straight.el.
@@ -408,16 +392,17 @@ If REPO-NAME is nil, defaults to `elacarte-repo-name'.
 Interactively, also uses the value of `elacarte-repo-name'."
   (interactive (list elacarte-repo-name))
   (let* ((repo-name (or repo-name elacarte-repo-name))
-         (repo-dir (expand-file-name repo-name elacarte-base-dir)))
-    (when (file-directory-p repo-dir)
+         (protocol-file (expand-file-name (concat repo-name ".el")
+                                          elacarte-base-dir)))
+    (when (file-exists-p protocol-file)
       (message "--- Registering '%s' recipe repository ---" repo-name)
 
       ;; 1. Make the package known to straight.el. `:build nil` is crucial.
       (straight-use-package
-       `(,(intern repo-name) :type git :local-repo ,repo-dir :build nil))
+       `(,(intern repo-name) :type nil :local-repo ,elacarte-base-dir :build nil))
 
       ;; 2. Load the recipe protocol implementation.
-      (add-to-list 'load-path repo-dir)
+      (add-to-list 'load-path elacarte-base-dir)
       (require (intern repo-name))
 
       ;; 3. Add to the head of the list of repositories to search.
