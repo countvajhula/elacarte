@@ -425,14 +425,19 @@ This function is intended to be run from the
                (recipes-file (expand-file-name elacarte-recipes-filename repo-path)))
           ;; 3. Add all primary recipes (don't traverse) from the repo's recipes.eld
           (if (file-exists-p recipes-file)
-              (elacarte-discover-recipes-from-file recipes-file
-                                                   local-repo-name
-                                                   nil  ; don't replace bespoke recipes
-                                                   :noconfirm ; don't ask for confirmation
-                                                   ;; and, mainly, don't traverse into pointer recipes
-                                                   :notraverse
-                                                   ;; this won't be used anyway
-                                                   (make-hash-table :test 'equal))
+              (progn
+                (elacarte-discover-recipes-from-file recipes-file
+                                                     local-repo-name
+                                                     nil  ; don't replace bespoke recipes
+                                                     :noconfirm ; don't ask for confirmation
+                                                     ;; and, mainly, don't traverse into pointer recipes
+                                                     :notraverse
+                                                     ;; this won't be used anyway
+                                                     (make-hash-table :test 'equal))
+                ;; 4. Clean up the temporary clone directory
+                (when (file-directory-p elacarte-temp-dir)
+                  (delete-directory elacarte-temp-dir t)
+                  (message "Cleaned up temporary repositories.")))
             (message "No '%s' file found in '%s'."
                      elacarte-recipes-filename local-repo-name)))
       (warn "elacarte-update-recipe: No recipe found for '%s'" package-name))))
