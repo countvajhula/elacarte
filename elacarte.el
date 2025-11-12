@@ -235,6 +235,12 @@ recipes will be traversed. Of course, these upstream repos are
 similarly responsible for *their* primary recipes, which will be added
 when they are encountered there.
 
+If the dependency repo does not advertise its own recipes, then the
+pointer recipe could include a `:primary t` field to override the
+traversal and have Elacarte treat it as a primary recipe. This should
+be used rarely, and it would be better for the dependency repo to
+advertise its recipes (consider submitted a pull request or issue).
+
 CURRENT-REPO-NAME is the :local-repo string of the repository we are
 currently scanning, which uniquely identifies the repository for our
 purposes.
@@ -256,9 +262,11 @@ VISITED-REPOS is a hash-table to track processed packages."
                  ;; We must run a "clean room" check for *every* recipe
                  ;; to find out what its :local-repo is.
                  (normalized-recipe (elacarte--install-clean-room recipe))
-                 (recipe-local-repo (plist-get normalized-recipe :local-repo)))
+                 (recipe-local-repo (plist-get normalized-recipe :local-repo))
+                 (primary-override (plist-get normalized-recipe :primary)))
             ;; Compare the recipe's repo with the repo we are currently in.
-            (if (equal recipe-local-repo current-repo-name)
+            (if (or (equal recipe-local-repo current-repo-name)
+                    primary-override)
                 (progn
                   (message "  -> Adding primary recipe for '%s'" package-name)
                   (elacarte-add-recipe recipe replace :auto))
