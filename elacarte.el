@@ -200,6 +200,27 @@ installation such as the location of the :local-repo."
     ;; the :local-repo for the package.
     (gethash package-name straight--recipe-cache)))
 
+(defun elacarte-add-recipes-in-file (recipes-file)
+  "A low-level utility to add all recipes in RECIPES-FILE.
+
+This does not do any validation or traversal, and simply adds the
+recipes in the file to `elacarte-recipes-file', replacing any existing
+recipes for the same packages.
+
+This should generally not be used except by tools implementing
+higher-level functionality."
+  (let* ((content (elacarte--get-content-from-disk recipes-file))
+         (recipes (car (read-from-string content))))
+    (message "Adding recipes in '%s'..." recipes-file)
+    (let ((package-names (mapcar #'car recipes)))
+      (dolist (recipe recipes)
+        (let* ((package-name (symbol-name (car recipe))))
+          ;; Compare the recipe's repo with the repo we are currently in.
+          (message "  -> Adding recipe for '%s'" package-name)
+          (elacarte-add-recipe recipe :replace :auto)))
+      ;; --- RECURSION STOP CONDITION 3: COMPLETED TRAVERSAL OF RECIPES FILE ---
+      (message "Successfully processed %d recipes." (length recipes)))))
+
 (defun elacarte-discover-recipes-from-file (recipes-file current-repo-name replace noconfirm notraverse visited-repos)
   "Recursively add recipes starting from RECIPE-FILE, prompting unless NOCONFIRM.
 This function implements the core logic to traverse and add recipes,
