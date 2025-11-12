@@ -3,7 +3,7 @@
 ;; Author: Sid Kasivajhula <sid@countvajhula.com>
 ;; URL: https://github.com/countvajhula/elacarte
 ;; Version: 0.1
-;; Package-Requires: ((emacs "24.1"))
+;; Package-Requires: ((emacs "24.1") (straight))
 
 ;; This file is NOT a part of Gnu Emacs.
 
