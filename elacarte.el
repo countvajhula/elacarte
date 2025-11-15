@@ -1,4 +1,4 @@
-;;; elacarte.el --- A la carte Emacs package recipes. -*- lexical-binding:t -*-
+;;; elacarte.el --- A la carte Emacs package recipes. -*- lexical-binding: t -*-
 
 ;; Author: Sid Kasivajhula <sid@countvajhula.com>
 ;; URL: https://github.com/countvajhula/elacarte
@@ -29,6 +29,7 @@
 
 (require 'cl-lib)
 (require 'url)
+(require 'straight)
 
 (defvar elacarte-base-dir
   (expand-file-name "elacarte" user-emacs-directory)
