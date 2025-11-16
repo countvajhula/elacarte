@@ -457,6 +457,17 @@ interactively), existing recipes will be overwritten."
     ;;    entire recursive process is complete.
     (elacarte--cleanup-temp-dir)))
 
+(defun elacarte--pointer-recipe-for-url (url)
+  "Generate a pointer recipe to URL."
+  (let* ((normalized-url (if (or (string-prefix-p "/" url) (string-prefix-p "~" url))
+                             ;; For local paths, expand and remove trailing slashes.
+                             (directory-file-name (expand-file-name url))
+                           ;; For remote URLs, just use as-is.
+                           url))
+         (basename (file-name-nondirectory (file-name-sans-extension normalized-url)))
+         (repo-name (intern basename)))
+    `(,repo-name :repo ,url)))
+
 (defun elacarte-discover-recipes-by-url (url &optional replace noconfirm notraverse)
   "Clone git repository from URL and add its advertised recipes.
 This is a convenience wrapper around `elacarte-discover-recipes'.
@@ -473,16 +484,11 @@ interactively), existing recipes will be overwritten."
                      ;; when interactive
                      nil
                      nil))
-  (let* ((normalized-url (if (or (string-prefix-p "/" url) (string-prefix-p "~" url))
-                             ;; For local paths, expand and remove trailing slashes.
-                             (directory-file-name (expand-file-name url))
-                           ;; For remote URLs, just use as-is.
-                           url))
-         (basename (file-name-nondirectory (file-name-sans-extension normalized-url)))
-         (repo-name (intern basename))
-         ;; Create a minimal recipe to pass to the main function.
-         (pointer `(,repo-name :repo ,url)))
-    (elacarte-discover-recipes pointer replace noconfirm notraverse)))
+  ;; Create a minimal recipe to pass to the main function.
+  (elacarte-discover-recipes (elacarte--pointer-recipe-for-url url)
+                             replace
+                             noconfirm
+                             notraverse))
 
 (defun elacarte-build-recipe-repository (&optional repo-name)
   "Create a local recipe repository serving recipes from `elacarte-recipes-file'.
