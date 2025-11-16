@@ -86,7 +86,7 @@ would house the user's curated and preferred recipes.")
    (lambda (r) (equal (car r) package-name))
    recipes))
 
-(defun elacarte-remove-recipe (package-name)
+(defun elacarte-remove-recipe (package-name &optional noconfirm)
   "Remove the recipe for PACKAGE-NAME from `elacarte-recipes-file'."
   (interactive
    (let ((recipes (elacarte--read elacarte-recipes-file)))
@@ -97,7 +97,8 @@ would house the user's curated and preferred recipes.")
     (unless recipe-to-remove
       (user-error "No recipe found for package '%s'" package-name))
 
-    (when (y-or-n-p (format "Really remove recipe for '%s'?" package-name))
+    (when (or noconfirm
+              (y-or-n-p (format "Really remove recipe for '%s'?" package-name)))
       (let ((updated-recipes (elacarte--remove-recipe package-name
                                                       existing-recipes)))
         (elacarte--write elacarte-recipes-file
