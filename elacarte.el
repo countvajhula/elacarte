@@ -283,7 +283,8 @@ for that repo may be discovered."
 CRITERIA is a predicate to use to filter the recipes. It will be
 called with each recipe as the first argument and the normalized
 POINTER recipe as the second argument."
-  (let* ((normalized-pointer (elacarte--clean-room-install pointer))
+  (let* ((criteria (or criteria (lambda (_r _p) t)))
+         (normalized-pointer (elacarte--clean-room-install pointer))
          (recipes-file (elacarte--recipes-file normalized-pointer))
          (recipes (when recipes-file (elacarte--read-data recipes-file))))
     (seq-filter (lambda (r)
