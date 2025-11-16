@@ -465,7 +465,7 @@ interactively), existing recipes will be overwritten."
                              (directory-file-name (expand-file-name url))
                            ;; For remote URLs, just use as-is.
                            url))
-         (basename (file-name-nondirectory (file-name-sans-extension normalized-url)))
+         (basename (file-name-nondirectory normalized-url))
          (repo-name (intern basename)))
     `(,repo-name :repo ,url)))
 
