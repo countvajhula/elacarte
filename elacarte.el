@@ -64,7 +64,7 @@ would house the user's curated and preferred recipes.")
     (insert-file-contents-literally file-path)
     (buffer-string)))
 
-(defun elacarte--read-data (file)
+(defun elacarte--read (file)
   "Read a Lisp datum from FILE."
   (car
    (read-from-string
@@ -89,10 +89,10 @@ would house the user's curated and preferred recipes.")
 (defun elacarte-remove-recipe (package-name)
   "Remove the recipe for PACKAGE-NAME from `elacarte-recipes-file'."
   (interactive
-   (let ((recipes (elacarte--read-data elacarte-recipes-file)))
+   (let ((recipes (elacarte--read elacarte-recipes-file)))
      (list (intern (completing-read "Remove recipe for package: "
                                     (mapcar #'car recipes))))))
-  (let* ((existing-recipes (elacarte--read-data elacarte-recipes-file))
+  (let* ((existing-recipes (elacarte--read elacarte-recipes-file))
          (recipe-to-remove (assoc package-name existing-recipes)))
     (unless recipe-to-remove
       (user-error "No recipe found for package '%s'" package-name))
@@ -146,7 +146,7 @@ The file is created if it does not exist."
                        "()"))
 
     ;; Check if a recipe for this package already exists.
-    (let* ((existing-recipes (elacarte--read-data elacarte-recipes-file))
+    (let* ((existing-recipes (elacarte--read elacarte-recipes-file))
            (old-recipe (assoc package-name existing-recipes))
            (old-auto (plist-get (cdr old-recipe) :auto)))
 
@@ -216,7 +216,7 @@ recipes for the same packages.
 
 This should generally not be used except by tools implementing
 higher-level functionality."
-  (let ((recipes (elacarte--read-data recipes-file)))
+  (let ((recipes (elacarte--read recipes-file)))
     (message "Adding recipes in '%s'..." recipes-file)
     (dolist (recipe recipes)
       ;; Compare the recipe's repo with the repo we are currently in.
@@ -282,7 +282,7 @@ POINTER recipe as the second argument."
   (let* ((criteria (or criteria (lambda (_r _p) t)))
          (normalized-pointer (elacarte--clean-room-install pointer))
          (recipes-file (elacarte--recipes-file normalized-pointer))
-         (recipes (when recipes-file (elacarte--read-data recipes-file))))
+         (recipes (when recipes-file (elacarte--read recipes-file))))
     (seq-filter (lambda (r)
                   (funcall criteria
                            r
@@ -351,7 +351,7 @@ currently scanning, which uniquely identifies the repository for our
 purposes.
 REPLACE is passed to `elacarte-add-recipe'.
 VISITED-REPOS is a hash-table to track processed packages."
-  (let ((recipes (elacarte--read-data recipes-file)))
+  (let ((recipes (elacarte--read recipes-file)))
     (message "Found recipes in '%s', traversing..."
              (elacarte--repo-name normalized-pointer))
     ;; Pass the repo-name we just found as the "current"
@@ -511,7 +511,7 @@ If REPO-NAME is nil, defaults to `elacarte-repo-name'."
       (elacarte--write protocol-file
                        protocol-content))
 
-    (let ((recipes (elacarte--read-data elacarte-recipes-file)))
+    (let ((recipes (elacarte--read elacarte-recipes-file)))
       (message "Successfully built recipe repository %s serving %d recipes from %s"
                protocol-file
                (length recipes)
