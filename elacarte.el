@@ -196,9 +196,9 @@ installation such as the location of the :local-repo."
     ;; which contains details of the actual installation such as
     ;; the :local-repo for the package.
     (let* ((normalized-recipe (gethash package-name straight--recipe-cache))
-           (repo-name (elacarte--repo-name normalized-recipe))
+           (repo-id (elacarte--repo-id normalized-recipe))
            (recipes-file (expand-file-name elacarte-recipes-filename
-                                           (straight--repos-dir repo-name))))
+                                           (straight--repos-dir repo-id))))
       (plist-put normalized-recipe :recipes recipes-file))))
 
 (defun elacarte--cleanup-temp-dir ()
@@ -257,10 +257,10 @@ Primary recipes are those that either point to the containing repo
 recipes on behalf of another package, necessary in rare cases.
 Pointers point to a different repo, where, typically, primary recipes
 for that repo may be discovered."
-  (let* ((repo-name (elacarte--repo-name normalized-pointer))
+  (let* ((repo-id (elacarte--repo-id normalized-pointer))
          (normalized-recipe (elacarte--clean-room-install recipe)))
-    (equal repo-name
-           (elacarte--repo-name normalized-recipe))))
+    (equal repo-id
+           (elacarte--repo-id normalized-recipe))))
 
 (defun elacarte--pointer-recipe-p (recipe normalized-pointer)
   "Is RECIPE a pointer in relation to NORMALIZED-POINTER?
@@ -300,7 +300,7 @@ POINTER recipe as the second argument."
   (elacarte--get-recipes pointer
                          #'elacarte--pointer-recipe-p))
 
-(defun elacarte--repo-name (normalized-recipe)
+(defun elacarte--repo-id (normalized-recipe)
   "Get the unique repo name of the NORMALIZED-RECIPE."
   (plist-get normalized-recipe :local-repo))
 
@@ -354,7 +354,7 @@ REPLACE is passed to `elacarte-add-recipe'.
 VISITED-REPOS is a hash-table to track processed packages."
   (let ((recipes (elacarte--read recipes-file)))
     (message "Found recipes in '%s', traversing..."
-             (elacarte--repo-name normalized-pointer))
+             (elacarte--repo-id normalized-pointer))
     ;; Pass the repo-name we just found as the "current"
     ;; repo name for the next step.
     (when (or noconfirm
@@ -397,13 +397,13 @@ recipes may be discovered."
          ;; This may be different from the package name.
          ;; This is our unique repository identifier that we use
          ;; to track "visited" repos during recipe discovery
-         (repo-name (elacarte--repo-name normalized-pointer))
+         (repo-id (elacarte--repo-id normalized-pointer))
          (recipes-file (elacarte--recipes-file normalized-pointer)))
-    (if (gethash repo-name visited-repos)
+    (if (gethash repo-id visited-repos)
         ;; --- RECURSION STOP CONDITION 1: REPO ALREADY VISITED ---
-        (message "Repository '%s' already traversed. Skipping." repo-name)
+        (message "Repository '%s' already traversed. Skipping." repo-id)
       ;; 1. Mark this repo as visited.
-      (puthash repo-name t visited-repos)
+      (puthash repo-id t visited-repos)
 
       ;; 2. Check for the recipes.eld file.
       (if (file-exists-p recipes-file)
@@ -416,7 +416,7 @@ recipes may be discovered."
                                            visited-repos)
         ;; --- RECURSION STOP CONDITION 2: NO RECIPES FILE ---
         (message "No '%s' file found in '%s'. Stopping traversal."
-                 elacarte-recipes-filename repo-name)))))
+                 elacarte-recipes-filename repo-id)))))
 
 (defun elacarte-discover-recipes (pointer &optional replace noconfirm notraverse)
   "Clone a package from POINTER and recursively add its advertised recipes.
