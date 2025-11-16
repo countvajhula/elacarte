@@ -258,21 +258,17 @@ Pointers point to a different repo, where, typically, primary recipes
 for that repo may be discovered."
   (let* ((repo-name (elacarte--repo-name normalized-pointer))
          (normalized-recipe (elacarte--clean-room-install recipe)))
-    (or (equal repo-name
-               (elacarte--repo-name normalized-recipe))
-        (elacarte--primary-override-p normalized-recipe))))
+    (equal repo-name
+           (elacarte--repo-name normalized-recipe))))
 
 (defun elacarte--pointer-recipe-p (recipe normalized-pointer)
   "Is RECIPE a pointer in relation to NORMALIZED-POINTER?
 
 NORMALIZED-POINTER is a recipe pointing to a repository containing Emacs packages.
 
-Primary recipes are those that either point to the containing repo
-(and not to a third party (e.g., dependency) repo) or which have
-`:primary t`, an overriding flag that allows projects to provide
-recipes on behalf of another package, necessary in rare cases.
-Pointers point to a different repo, where, typically, primary recipes
-for that repo may be discovered."
+See `elacarte--primary-recipe-p' regarding primary vs pointer recipes.
+Note that pointer recipes marked as primary overrides (i.e., `:primary
+t`) will still be considered pointers by this function."
   (not
    (elacarte--primary-recipe-p recipe
                                normalized-pointer)))
@@ -369,8 +365,9 @@ VISITED-REPOS is a hash-table to track processed packages."
         ;; We must run a "clean room" check for *every* recipe
         ;; to find out what its :local-repo is.
         ;; Compare the recipe's repo with the repo we are currently in.
-        (if (elacarte--primary-recipe-p recipe
-                                        normalized-pointer)
+        (if (or (elacarte--primary-recipe-p recipe
+                                            normalized-pointer)
+                (elacarte--primary-override-p recipe))
             (progn
               (message "  -> Adding primary recipe for '%s'"
                        (elacarte--package-name recipe))
