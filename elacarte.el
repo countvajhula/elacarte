@@ -172,13 +172,43 @@ The file is created if it does not exist."
                  (if old-recipe "updated in" "added to")
                  (file-name-nondirectory elacarte-recipes-file))))))
 
-(defun elacarte--clean-room-install (recipe)
+(defun elacarte-clean-room-install (recipe)
   "Install RECIPE in a clean room environment.
 
 Return the normalized recipe that contains details of the actual
 installation such as the location of the :local-repo."
   ;; We create a true "clean room" by let-binding the base-dir
   ;; and all of straight.el's in-memory caches.
+  ;;
+  ;; Note: At first it seems it would be nice if we could clean up the
+  ;; temp path at the end of this function, so that it is fully
+  ;; self-contained (currently we rely on high level public APIs such
+  ;; as `elacarte-discover-recipes' to do this cleanup). All relevant
+  ;; information for the clean room installation that the caller may
+  ;; be interested in could be encoded in the returned normalized
+  ;; recipe, so that the operation is "functional" and the on-disk
+  ;; changes need not be retained outside the scope of this
+  ;; function. As we do not expect repos to be visited more than once
+  ;; during recipe discovery, retaining the disk changes to gain by
+  ;; the "idempotent" property of the clean room installation should
+  ;; not make any practical difference (as the recipes would not be
+  ;; installed more than once, anyway).
+  ;; Unfortunately, that's not quite the case, since during recipe
+  ;; discovery, each repo is in fact cloned at least twice. The first
+  ;; time, it is cloned via the pointer to it. Subsequently, every
+  ;; recipe it contains (including at least one that would point to
+  ;; itself) requires a clean room installation in order to ascertain
+  ;; whether it is primary or secondary. It is only that the repo is
+  ;; not visited more than once *via pointer*.
+  ;; If we wanted to make the operation of this function more
+  ;; functional, some options could be:
+  ;;   1. Change the algorithm for determining whether a recipe is
+  ;;      primary vs secondary so that cloning the repo isn't
+  ;;      necessary...
+  ;;   2. Follow pointer, identify its primary and pointer recipes,
+  ;;      add primary recipes, and only then traverse pointers,
+  ;;      leveraging the context of having just followed a pointer (in
+  ;;      some way) to determine primary vs secondary efficiently.
   (let ((package-name (elacarte--package-name recipe))
         (straight-base-dir elacarte-temp-dir)
         (straight-allow-recipe-inheritance nil)
@@ -262,7 +292,7 @@ recipes on behalf of another package, necessary in rare cases.
 Pointers point to a different repo, where, typically, primary recipes
 for that repo may be discovered."
   (let* ((repo-id (elacarte--repo-id normalized-pointer))
-         (normalized-recipe (elacarte--clean-room-install recipe)))
+         (normalized-recipe (elacarte-clean-room-install recipe)))
     (equal repo-id
            (elacarte--repo-id normalized-recipe))))
 
@@ -286,7 +316,7 @@ CRITERIA is a predicate to use to filter the recipes. It will be
 called with each recipe as the first argument and the normalized
 POINTER recipe as the second argument."
   (let* ((criteria (or criteria (lambda (_r _p) t)))
-         (normalized-pointer (elacarte--clean-room-install pointer))
+         (normalized-pointer (elacarte-clean-room-install pointer))
          (recipes-file (elacarte--recipes-file normalized-pointer))
          (recipes (when recipes-file (elacarte--read recipes-file))))
     (seq-filter (lambda (r)
@@ -397,7 +427,7 @@ recipes may be discovered."
   ;; 1. Use straight.el to ensure the package repo is cloned
   ;; in a "clean room" environment, and obtain the "normalized" recipe
   ;; for that specific installation.
-  (let* ((normalized-pointer (elacarte--clean-room-install pointer))
+  (let* ((normalized-pointer (elacarte-clean-room-install pointer))
          ;; We get the *actual* :local-repo name from this recipe.
          ;; This may be different from the package name.
          ;; This is our unique repository identifier that we use
