@@ -54,7 +54,8 @@
 (defconst elacarte-test-recipes-file "test-recipes.eld")
 
 (defun fixture-empty-cookbook (body)
-  (let ((elacarte-recipes-file elacarte-test-recipes-file))
+  (let* ((default-directory elacarte-test-setup-directory)
+         (elacarte-recipes-file elacarte-test-recipes-file))
     (unwind-protect
         (progn
           (with-temp-file elacarte-recipes-file
@@ -65,7 +66,8 @@
       (delete-file elacarte-test-recipes-file))))
 
 (defun fixture-1-recipe-cookbook (body)
-  (let ((elacarte-recipes-file elacarte-test-recipes-file))
+  (let* ((default-directory elacarte-test-setup-directory)
+         (elacarte-recipes-file elacarte-test-recipes-file))
     (unwind-protect
         (progn
           (with-temp-file elacarte-recipes-file
@@ -76,7 +78,8 @@
       (delete-file elacarte-test-recipes-file))))
 
 (defun fixture-2-recipe-cookbook (body)
-  (let ((elacarte-recipes-file elacarte-test-recipes-file))
+  (let* ((default-directory elacarte-test-setup-directory)
+         (elacarte-recipes-file elacarte-test-recipes-file))
     (unwind-protect
         (progn
           (with-temp-file elacarte-recipes-file
