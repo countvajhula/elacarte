@@ -335,6 +335,9 @@ POINTER recipe as the second argument."
   (elacarte--get-recipes pointer
                          #'elacarte--pointer-recipe-p))
 
+;; TODO: maybe streamline these APIs so that they all expect the
+;; recipe argument to be a full recipe rather than a normalized one
+;; that doesn't include the leading package name
 (defun elacarte--repo-id (normalized-recipe)
   "Get the unique repo name of the NORMALIZED-RECIPE."
   (plist-get normalized-recipe :local-repo))
@@ -343,9 +346,9 @@ POINTER recipe as the second argument."
   "Get the package name of the RECIPE."
   (symbol-name (car recipe)))
 
-(defun elacarte--recipes-file (recipe)
-  "Get the recipe file of the RECIPE."
-  (plist-get recipe :recipes))
+(defun elacarte--recipes-file (normalized-recipe)
+  "Get the recipe file of the NORMALIZED-RECIPE."
+  (plist-get normalized-recipe :recipes))
 
 (defun elacarte--primary-override-p (recipe)
   "Is RECIPE a primary override?
@@ -355,7 +358,9 @@ primary recipe for an upstream repo because it won't be found upstream
 for some reason. This should be a last resort for the downstream
 repo, as cannot be responsible for the accuracy of third party
 recipes."
-  (plist-get recipe :primary))
+  ;; Note the argument is a full recipe rather than a normalized one.
+  ;; The former includes the leading package name.
+  (plist-get (cdr recipe) :primary))
 
 (defun elacarte--traverse-recipes-file (recipes-file
                                         normalized-pointer

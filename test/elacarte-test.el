@@ -91,6 +91,32 @@
           (funcall body))
       (delete-file elacarte-test-recipes-file))))
 
+(defun fixture-empty-recipes-file (body)
+  (let* ((default-directory elacarte-test-setup-directory)
+         (recipes-file "another-recipes.eld"))
+    (unwind-protect
+        (progn
+          (with-temp-file recipes-file
+            ;; it must be contain a lisp datum
+            ;; rather than be truly empty
+            (insert "()"))
+          (funcall body))
+      (delete-file recipes-file))))
+
+(defun fixture-2-recipe-file (body)
+  (let* ((default-directory elacarte-test-setup-directory)
+         (recipes-file "another-recipes.eld"))
+    (unwind-protect
+        (progn
+          (with-temp-file recipes-file
+            ;; it must be contain a lisp datum
+            ;; rather than be truly empty
+            (insert
+             (concat "((ela1 :host gitclub :repo \"my/ela1\")" "\n"
+                     "(ela-two :host gitplace :repo \"my/ela-two\"))")))
+          (funcall body))
+      (delete-file recipes-file))))
+
 ;;
 ;; Utilities
 ;;
@@ -169,3 +195,92 @@
   (let ((recipe (elacarte-clean-room-install '(abc :type nil :host myhost :repo "my/abc"))))
     ;; the location of the repo's recipes.eld file
     (should (plist-get recipe :recipes))))
+
+(ert-deftest add-recipes-in-file-test ()
+  ;; empty file - does nothing
+  (with-fixture fixture-empty-cookbook
+    (with-fixture fixture-empty-recipes-file
+      (elacarte-add-recipes-in-file recipes-file)
+      (should (null (elacarte--read elacarte-recipes-file)))))
+
+  ;; 2 recipes - adds both
+  (with-fixture fixture-empty-cookbook
+    (with-fixture fixture-2-recipe-file
+      (elacarte-add-recipes-in-file recipes-file)
+      (should (contains-recipe-p 'ela1
+                                 (elacarte--read elacarte-recipes-file)))
+      (should (contains-recipe-p 'ela-two
+                                 (elacarte--read elacarte-recipes-file))))))
+
+(ert-deftest primary-recipe-p-test ()
+  ;; if repo ids match, it's primary
+  (let ((normalized-pointer-recipe '(:type nil :local-repo "abc"))
+        (recipe '(another :type nil :local-repo "abc")))
+    (should (elacarte--primary-recipe-p recipe normalized-pointer-recipe)))
+
+  ;; if repo ids don't match, it's not
+  (let ((normalized-pointer-recipe '(:type nil :local-repo "abc"))
+        (recipe '(another :type nil :local-repo "another")))
+    (should-not (elacarte--primary-recipe-p recipe normalized-pointer-recipe)))
+
+  ;; primary override isn't considered primary
+  (let ((normalized-pointer-recipe '(:type nil :local-repo "abc"))
+        ;; TODO: we can't use "another" here as it's already been
+        ;; registered as having been installed, so Straight seems to
+        ;; do some form of check for the path (which we don't actually
+        ;; install in these tests as we're using :type nil) and
+        ;; doesn't find it.
+        (recipe '(another-too :type nil :local-repo "another-too" :primary t)))
+    (should-not (elacarte--primary-recipe-p recipe normalized-pointer-recipe))))
+
+(ert-deftest pointer-recipe-p-test ()
+  ;; if repo ids match, it's not a pointer
+  (let ((normalized-pointer-recipe '(:type nil :local-repo "abc"))
+        (recipe '(another :type nil :local-repo "abc")))
+    (should-not (elacarte--pointer-recipe-p recipe normalized-pointer-recipe)))
+
+  ;; if repo ids don't match, it is
+  (let ((normalized-pointer-recipe '(:type nil :local-repo "abc"))
+        (recipe '(another :type nil :local-repo "another")))
+    (should (elacarte--pointer-recipe-p recipe normalized-pointer-recipe)))
+
+  ;; primary override is still considered a pointer
+  (let ((normalized-pointer-recipe '(:type nil :local-repo "abc"))
+        ;; TODO: see above re: "another-too"
+        (recipe '(another-too :type nil :local-repo "another-too" :primary t)))
+    (should (elacarte--pointer-recipe-p recipe normalized-pointer-recipe))))
+
+(ert-deftest primary-override-p-test ()
+  (let ((recipe '(abc :type nil :local-repo "abc")))
+    (should-not (elacarte--primary-override-p recipe)))
+  (let ((recipe '(abc :type nil :local-repo "abc" :primary t)))
+    (should (elacarte--primary-override-p recipe))))
+
+(ert-deftest repo-id-test ()
+  (let ((normalized-recipe '(:type nil :local-repo "my-abc")))
+    (should (equal "my-abc"
+                   (elacarte--repo-id normalized-recipe)))))
+
+(ert-deftest package-name-test ()
+  (let ((recipe '(abc :type nil :local-repo "my-abc")))
+    (should (equal "abc"
+                   (elacarte--package-name recipe)))))
+
+(ert-deftest recipes-file-test ()
+  (let ((normalized-recipe '(:type nil :local-repo "my-abc" :recipes "/path/to/abc/recipes.eld")))
+    (should (equal "/path/to/abc/recipes.eld"
+                   (elacarte--recipes-file normalized-recipe)))))
+
+(ert-deftest pointer-recipe-for-url-test ()
+  (let ((url "/path/to/abc"))
+    (should (equal '(abc :repo "/path/to/abc")
+                   (elacarte--pointer-recipe-for-url url))))
+  (let ((url "https://git.club/abc"))
+    (should (equal '(abc :repo "https://git.club/abc")
+                   (elacarte--pointer-recipe-for-url url))))
+  (let ((url "https://git.club/abc.el"))
+    (should (equal '(abc.el :repo "https://git.club/abc.el")
+                   (elacarte--pointer-recipe-for-url url))))
+  (let ((url "git@github.com:my-user/abc"))
+    (should (equal '(abc.el :repo "git@github.com:my-user/abc")
+                   (elacarte--pointer-recipe-for-url url)))))
