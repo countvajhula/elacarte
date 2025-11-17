@@ -156,3 +156,16 @@
     (let ((recipes (elacarte--read elacarte-recipes-file)))
       (should (= 1 (length recipes)))
       (should (equal "ela-two" (elacarte--package-name (car recipes)))))))
+
+(ert-deftest clean-room-install-test ()
+  ;; installs it and returns normalized recipe containing the
+  ;; :local-repo name
+  (let ((recipe (elacarte-clean-room-install '(abc :type nil :host myhost :repo "my/abc"))))
+    ;; note we use :type nil so that this doesn't actually attempt to
+    ;; install the package
+    (should (equal (plist-get recipe :local-repo)
+                   "abc")))
+
+  (let ((recipe (elacarte-clean-room-install '(abc :type nil :host myhost :repo "my/abc"))))
+    ;; the location of the repo's recipes.eld file
+    (should (plist-get recipe :recipes))))
