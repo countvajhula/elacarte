@@ -191,6 +191,9 @@ installation such as the location of the :local-repo."
     ;; This call has the side effect of cloning the repo AND
     ;; registering the normalized recipe in the (temporary)
     ;; `straight--recipe-cache`.
+    ;; Note that it :type is nil, this will not attempt to
+    ;; do anything and will just return the normalized recipe,
+    ;; which may be useful for testing.
     (straight-use-package-no-build recipe)
     ;; Return the normalized recipe that straight.el just created,
     ;; which contains details of the actual installation such as

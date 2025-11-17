@@ -82,7 +82,9 @@
           (with-temp-file elacarte-recipes-file
             ;; it must be contain a lisp datum
             ;; rather than be truly empty
-            (insert "((ela-two :host gitplace :repo \"my/ela-two\"))"))
+            (insert
+             (concat "((ela1 :host gitclub :repo \"my/ela1\")" "\n"
+                     "(ela-two :host gitplace :repo \"my/ela-two\"))")))
           (funcall body))
       (delete-file elacarte-test-recipes-file))))
 
@@ -132,3 +134,22 @@
                          'auto)
     (should (recipe-has-property-p (car (elacarte--read elacarte-recipes-file))
                                    :auto t))))
+
+(ert-deftest remove-recipe-test ()
+
+  ;; error if not present
+  (with-fixture fixture-empty-cookbook
+    (should-error (elacarte-remove-recipe '(abc :host myhost :repo "my/abc"))))
+
+  ;; remove if present
+  (with-fixture fixture-1-recipe-cookbook
+    (elacarte-remove-recipe 'ela1 'noconfirm)
+    (let ((recipes (elacarte--read elacarte-recipes-file)))
+      (should (null recipes))))
+
+  ;; does not remove other recipes
+  (with-fixture fixture-2-recipe-cookbook
+    (elacarte-remove-recipe 'ela1 'noconfirm)
+    (let ((recipes (elacarte--read elacarte-recipes-file)))
+      (should (= 1 (length recipes)))
+      (should (equal "ela-two" (elacarte--package-name (car recipes)))))))
