@@ -322,7 +322,7 @@ POINTER recipe as the second argument."
 This means a recipe in a downstream repo that presumes to provide a
 primary recipe for an upstream repo because it won't be found upstream
 for some reason. This should be a last resort for the downstream
-repo, as cannot be responsible for the accuracy of third party
+repo, as it cannot be responsible for the accuracy of third party
 recipes."
   (plist-get (cdr recipe) :primary))
 
