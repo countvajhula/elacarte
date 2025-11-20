@@ -125,7 +125,12 @@
   "Does RECIPES contain R?"
   (member r (mapcar #'car recipes)))
 
-(defun recipe-has-property-p (recipe prop value)
+(defun recipe-has-property-p (recipe prop)
+  "Does RECIPE have the property PROP?"
+  (plist-member (cdr recipe)
+                prop))
+
+(defun recipe-assert-property-p (recipe prop value)
   "Does RECIPE have the property PROP with value VALUE?"
   (equal (plist-get (cdr recipe)
                     prop)
@@ -146,7 +151,7 @@
     (elacarte-add-recipe '(ela1 :host myhost :repo "my/abc"))
     (let ((recipes (elacarte--read elacarte-recipes-file)))
       (should (= 1 (length recipes)))
-      (should (recipe-has-property-p (car recipes) :host 'gitclub))))
+      (should (recipe-assert-property-p (car recipes) :host 'gitclub))))
 
   ;; replaces existing
   (with-fixture fixture-1-recipe-cookbook
@@ -154,14 +159,14 @@
                          'replace)
     (let ((recipes (elacarte--read elacarte-recipes-file)))
       (should (= 1 (length recipes)))
-      (should (recipe-has-property-p (car recipes) :host 'myhost))))
+      (should (recipe-assert-property-p (car recipes) :host 'myhost))))
 
   ;; marks as auto
   (with-fixture fixture-empty-cookbook
     (elacarte-add-recipe '(ela1 :host myhost :repo "my/abc")
                          nil
                          'auto)
-    (should (recipe-has-property-p (car (elacarte--read elacarte-recipes-file))
+    (should (recipe-assert-property-p (car (elacarte--read elacarte-recipes-file))
                                    :auto t))))
 
 (ert-deftest remove-recipe-test ()
@@ -189,12 +194,12 @@
   (let ((recipe (elacarte-clean-room-install '(abc :type nil :host myhost :repo "my/abc"))))
     ;; note we use :type nil so that this doesn't actually attempt to
     ;; install the package
-    (should (equal (plist-get recipe :local-repo)
-                   "abc")))
+    (should (recipe-assert-property-p recipe
+                                      :local-repo "abc")))
 
   (let ((recipe (elacarte-clean-room-install '(abc :type nil :host myhost :repo "my/abc"))))
     ;; the location of the repo's recipes.eld file
-    (should (plist-get recipe :recipes))))
+    (should (recipe-has-property-p recipe :recipes))))
 
 (ert-deftest add-recipes-in-file-test ()
   ;; empty file - does nothing
@@ -214,17 +219,17 @@
 
 (ert-deftest primary-recipe-p-test ()
   ;; if repo ids match, it's primary
-  (let ((normalized-pointer-recipe '(:type nil :local-repo "abc"))
+  (let ((normalized-pointer-recipe '(abc :type nil :local-repo "abc"))
         (recipe '(another :type nil :local-repo "abc")))
     (should (elacarte--primary-recipe-p recipe normalized-pointer-recipe)))
 
   ;; if repo ids don't match, it's not
-  (let ((normalized-pointer-recipe '(:type nil :local-repo "abc"))
+  (let ((normalized-pointer-recipe '(abc :type nil :local-repo "abc"))
         (recipe '(another :type nil :local-repo "another")))
     (should-not (elacarte--primary-recipe-p recipe normalized-pointer-recipe)))
 
   ;; primary override isn't considered primary
-  (let ((normalized-pointer-recipe '(:type nil :local-repo "abc"))
+  (let ((normalized-pointer-recipe '(abc :type nil :local-repo "abc"))
         ;; TODO: we can't use "another" here as it's already been
         ;; registered as having been installed, so Straight seems to
         ;; do some form of check for the path (which we don't actually
@@ -235,17 +240,17 @@
 
 (ert-deftest pointer-recipe-p-test ()
   ;; if repo ids match, it's not a pointer
-  (let ((normalized-pointer-recipe '(:type nil :local-repo "abc"))
+  (let ((normalized-pointer-recipe '(abc :type nil :local-repo "abc"))
         (recipe '(another :type nil :local-repo "abc")))
     (should-not (elacarte--pointer-recipe-p recipe normalized-pointer-recipe)))
 
   ;; if repo ids don't match, it is
-  (let ((normalized-pointer-recipe '(:type nil :local-repo "abc"))
+  (let ((normalized-pointer-recipe '(abc :type nil :local-repo "abc"))
         (recipe '(another :type nil :local-repo "another")))
     (should (elacarte--pointer-recipe-p recipe normalized-pointer-recipe)))
 
   ;; primary override is still considered a pointer
-  (let ((normalized-pointer-recipe '(:type nil :local-repo "abc"))
+  (let ((normalized-pointer-recipe '(abc :type nil :local-repo "abc"))
         ;; TODO: see above re: "another-too"
         (recipe '(another-too :type nil :local-repo "another-too" :primary t)))
     (should (elacarte--pointer-recipe-p recipe normalized-pointer-recipe))))
@@ -257,7 +262,7 @@
     (should (elacarte--primary-override-p recipe))))
 
 (ert-deftest repo-id-test ()
-  (let ((normalized-recipe '(:type nil :local-repo "my-abc")))
+  (let ((normalized-recipe '(abc :type nil :local-repo "my-abc")))
     (should (equal "my-abc"
                    (elacarte--repo-id normalized-recipe)))))
 
@@ -267,7 +272,7 @@
                    (elacarte--package-name recipe)))))
 
 (ert-deftest recipes-file-test ()
-  (let ((normalized-recipe '(:type nil :local-repo "my-abc" :recipes "/path/to/abc/recipes.eld")))
+  (let ((normalized-recipe '(my-abc :type nil :local-repo "my-abc" :recipes "/path/to/abc/recipes.eld")))
     (should (equal "/path/to/abc/recipes.eld"
                    (elacarte--recipes-file normalized-recipe)))))
 

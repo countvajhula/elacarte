@@ -209,14 +209,15 @@ installation such as the location of the :local-repo."
   ;;      add primary recipes, and only then traverse pointers,
   ;;      leveraging the context of having just followed a pointer (in
   ;;      some way) to determine primary vs secondary efficiently.
-  (let ((package-name (elacarte--package-name recipe))
+  (let ((package-name (car recipe))
+        (package-name-str (elacarte--package-name recipe))
         (straight-base-dir elacarte-temp-dir)
         (straight-allow-recipe-inheritance nil)
         (straight--success-cache (make-hash-table :test 'equal))
         (straight--recipe-cache (make-hash-table :test 'equal))
         (straight--repo-cache (make-hash-table :test 'equal))
         (straight--profile-cache (make-hash-table :test 'equal)))
-    (message "Ensuring package repo for '%s' is available (clean room)..." package-name)
+    (message "Ensuring package repo for '%s' is available (clean room)..." package-name-str)
     ;; Ensure the recipe is installed (idempotent)
     ;; This call has the side effect of cloning the repo AND
     ;; registering the normalized recipe in the (temporary)
@@ -228,11 +229,15 @@ installation such as the location of the :local-repo."
     ;; Return the normalized recipe that straight.el just created,
     ;; which contains details of the actual installation such as
     ;; the :local-repo for the package.
-    (let* ((normalized-recipe (gethash package-name straight--recipe-cache))
+    (let* ((normalized-recipe (cons package-name
+                                    (gethash package-name-str
+                                             straight--recipe-cache)))
            (repo-id (elacarte--repo-id normalized-recipe))
            (recipes-file (expand-file-name elacarte-recipes-filename
                                            (straight--repos-dir repo-id))))
-      (plist-put normalized-recipe :recipes recipes-file))))
+      (cons package-name
+            (plist-put (cdr normalized-recipe)
+                       :recipes recipes-file)))))
 
 (defun elacarte--cleanup-temp-dir ()
   "Delete `elacarte-temp-dir' if present."
@@ -299,20 +304,17 @@ POINTER recipe as the second argument."
   (elacarte--get-recipes pointer
                          #'elacarte--pointer-recipe-p))
 
-;; TODO: maybe streamline these APIs so that they all expect the
-;; recipe argument to be a full recipe rather than a normalized one
-;; that doesn't include the leading package name
-(defun elacarte--repo-id (normalized-recipe)
-  "Get the unique repo name of the NORMALIZED-RECIPE."
-  (plist-get normalized-recipe :local-repo))
-
 (defun elacarte--package-name (recipe)
   "Get the package name of the RECIPE."
   (symbol-name (car recipe)))
 
+(defun elacarte--repo-id (normalized-recipe)
+  "Get the unique repo name of the NORMALIZED-RECIPE."
+  (plist-get (cdr normalized-recipe) :local-repo))
+
 (defun elacarte--recipes-file (normalized-recipe)
   "Get the recipe file of the NORMALIZED-RECIPE."
-  (plist-get normalized-recipe :recipes))
+  (plist-get (cdr normalized-recipe) :recipes))
 
 (defun elacarte--primary-override-p (recipe)
   "Is RECIPE a primary override?
@@ -322,8 +324,6 @@ primary recipe for an upstream repo because it won't be found upstream
 for some reason. This should be a last resort for the downstream
 repo, as cannot be responsible for the accuracy of third party
 recipes."
-  ;; Note the argument is a full recipe rather than a normalized one.
-  ;; The former includes the leading package name.
   (plist-get (cdr recipe) :primary))
 
 (defun elacarte--traverse-recipes-file (recipes-file
