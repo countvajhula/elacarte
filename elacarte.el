@@ -241,44 +241,6 @@ installation such as the location of the :local-repo."
              (message "Cleaned up temporary repositories."))
     (message "Nothing to clean up.")))
 
-(defun elacarte-add-recipes-in-file (recipes-file)
-  "A low-level utility to add all recipes in RECIPES-FILE.
-
-This does not do any validation or traversal, and simply adds the
-recipes in the file to `elacarte-recipes-file', replacing any existing
-recipes for the same packages.
-
-This should generally not be used except by tools implementing
-higher-level functionality."
-  (let ((recipes (elacarte--read recipes-file)))
-    (message "Adding recipes in '%s'..." recipes-file)
-    (dolist (recipe recipes)
-      ;; Compare the recipe's repo with the repo we are currently in.
-      (message "  -> Adding recipe for '%s'"
-               (elacarte--package-name recipe))
-      (elacarte-add-recipe recipe :replace :auto))
-    (message "Successfully processed %d recipes." (length recipes))))
-
-(defun elacarte-traverse-recipes-file (recipes-file)
-  "Traverse RECIPES-FILE and recursively add recipes discovered.
-
-This treats all recipes in the file as pointers. If they are in fact
-primary, the repo will be redundantly rebuilt (which is idempotent,
-however), and if not, the upstream repo will be cloned and built and
-the recipes there discovered. This ensures that the true, canonical
-recipes are discovered for each of the referenced packages, even if
-there is some initial redundancy."
-  (interactive "fRecipes file: ")
-  (message "Traversing recipes in %s" recipes-file)
-  (let ((visited-repos (make-hash-table :test 'equal)))
-    (elacarte--traverse-recipes-file recipes-file
-                                     nil
-                                     'replace
-                                     'noconfirm
-                                     nil
-                                     visited-repos)
-    (elacarte--cleanup-temp-dir)))
-
 (defun elacarte--primary-recipe-p (recipe normalized-pointer)
   "Is RECIPE primary in relation to NORMALIZED-POINTER?
 
@@ -496,6 +458,44 @@ interactively), existing recipes will be overwritten."
 
     ;; 3. Clean up the temporary clone directory *after* the
     ;;    entire recursive process is complete.
+    (elacarte--cleanup-temp-dir)))
+
+(defun elacarte-add-recipes-in-file (recipes-file)
+  "A low-level utility to add all recipes in RECIPES-FILE.
+
+This does not do any validation or traversal, and simply adds the
+recipes in the file to `elacarte-recipes-file', replacing any existing
+recipes for the same packages.
+
+This should generally not be used except by tools implementing
+higher-level functionality."
+  (let ((recipes (elacarte--read recipes-file)))
+    (message "Adding recipes in '%s'..." recipes-file)
+    (dolist (recipe recipes)
+      ;; Compare the recipe's repo with the repo we are currently in.
+      (message "  -> Adding recipe for '%s'"
+               (elacarte--package-name recipe))
+      (elacarte-add-recipe recipe :replace :auto))
+    (message "Successfully processed %d recipes." (length recipes))))
+
+(defun elacarte-traverse-recipes-file (recipes-file)
+  "Traverse RECIPES-FILE and recursively add recipes discovered.
+
+This treats all recipes in the file as pointers. If they are in fact
+primary, the repo will be redundantly rebuilt (which is idempotent,
+however), and if not, the upstream repo will be cloned and built and
+the recipes there discovered. This ensures that the true, canonical
+recipes are discovered for each of the referenced packages, even if
+there is some initial redundancy."
+  (interactive "fRecipes file: ")
+  (message "Traversing recipes in %s" recipes-file)
+  (let ((visited-repos (make-hash-table :test 'equal)))
+    (elacarte--traverse-recipes-file recipes-file
+                                     nil
+                                     'replace
+                                     'noconfirm
+                                     nil
+                                     visited-repos)
     (elacarte--cleanup-temp-dir)))
 
 (defun elacarte--pointer-recipe-for-url (url)
