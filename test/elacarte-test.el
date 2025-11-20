@@ -282,5 +282,5 @@
     (should (equal '(abc.el :repo "https://git.club/abc.el")
                    (elacarte--pointer-recipe-for-url url))))
   (let ((url "git@github.com:my-user/abc"))
-    (should (equal '(abc.el :repo "git@github.com:my-user/abc")
+    (should (equal '(abc :repo "git@github.com:my-user/abc")
                    (elacarte--pointer-recipe-for-url url)))))
