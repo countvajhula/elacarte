@@ -283,7 +283,8 @@ there is some initial redundancy."
   "Is RECIPE primary in relation to NORMALIZED-POINTER?
 
 NORMALIZED-POINTER is a recipe pointing to a repository containing
-Emacs packages.
+Emacs packages. It is expected to be \"normalized,\" that is, it
+should have a :local-repo property indicating its canonical name.
 
 Primary recipes are those that either point to the containing repo
 (and not to a third party (e.g., dependency) repo) or which have
@@ -300,7 +301,8 @@ for that repo may be discovered."
   "Is RECIPE a pointer in relation to NORMALIZED-POINTER?
 
 NORMALIZED-POINTER is a recipe pointing to a repository containing
-Emacs packages.
+Emacs packages. It is expected to be \"normalized,\" that is, it
+should have a :local-repo property indicating its canonical name.
 
 See `elacarte--primary-recipe-p' regarding primary vs pointer recipes.
 Note that pointer recipes marked as primary overrides (i.e., `:primary
