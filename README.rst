@@ -1,7 +1,143 @@
+========
 elacarte
 ========
 
-Emacs just the way you like it.
+--------------------------------------------------
+Appropriate Authority for Emacs Package Recipes.
+--------------------------------------------------
+
+Elacarte is a decentralized recipe discovery engine for Emacs. It allows package authors to advertise how their packages should be built directly within their own repositories, and empowers users to aggregate these authoritative recipes into a curated, local "cookbook."
+
+The Core Philosophy: Appropriate Authority
+==========================================
+
+The current Emacs ecosystem often relies on centralized archives to define how a package is built. Elacarte restores a natural **chain of authority**:
+
+    **You (The User) > Package Authors > Centralized Archives**
+
+1. **You** are the ultimate authority on what runs in your Emacs. You can override any recipe.
+2. **Package authors** are the authority on how their code should be built and what it depends on.
+3. **Centralized archives** are excellent for *discovery*, but they should not be the bottleneck for *distribution*.
+
+Why Elacarte?
+=============
+
+While tools like ``straight.el`` and ``elpaca`` allow you to install from any Git repo, there is a missing link: *Who defines the recipe?*
+
+The Problems Today
+------------------
+
+* **Fragile configs:** To install a package not on a centralized archive such as ELPA, you must write an "inline recipe" in your init file. This conflates configuration with installation, leading to fragile load orders.
+* **Coordination bottlenecks:** If a developer refactors their folder structure, they must submit a PR to a centralized archive and wait for approval before users can safely update.
+* **Testing friction:** Testing whether a package is "installable" is currently opaque, often requiring specialized third-party sandboxes instead of simple local checks.
+
+The Elacarte Solution
+---------------------
+
+* **Decentralized discovery:** Authors include a ``recipes.eld`` in their repo. Elacarte finds it, reads it, and handles the rest.
+* **Recursive resolution:** If a package depends on another non-standard package, Elacarte follows the "pointer" to the dependency’s repo and discovers its authoritative recipe.
+* **Clean separation:** Keep your ``init.el`` focused on *configuration* (how you use the package) while Elacarte handles *installation* (how you get the package).
+
+How It Works: Primary vs. Pointer
+---------------------------------
+
+Elacarte traverses a graph of repositories to build your local cookbook using two simple concepts:
+
+1. **Primary recipes**: These describe packages contained within the current repository. *The repo is the authority for these*.
+
+2. **Pointer recipes**: These describe dependencies hosted elsewhere. Elacarte doesn't just trust a third-party's version of a dependency's recipe; it follows the pointer to the source to find the primary recipe there.
+
+This ensures you always get the canonical build instructions defined by the people who actually wrote the code.
+
+Ultimate Authority
+------------------
+
+Elacarte's cookbook can be easily edited by you, and it takes precedence over third party recipe repositories and canonical recipes provided by the developer.
+
+This gives you ultimate authority over the recipes used in your own Emacs, without necessitating any fragile workarounds such as employing inline recipes.
+
+Technical Implementation
+========================
+
+Elacarte operates as a **pre-processor for your package manager**. It doesn't replace the build logic of ``straight.el``; instead, it enables you to curate a local, overriding, recipe repository ("cookbook") that Straight is made aware of via ``straight-recipe-repositories``.
+
+Cookbook
+--------
+
+Elacarte maintains a master file at ``~/.emacs.d/elacarte/recipes.eld``. This file is the source of truth for your personal Emacs flavor, and it can be maintained and versioned along with the rest of your init config.
+
+* **Auto-updates:** Canonical recipes added by "discovery" are marked with ``:auto t``. When you update a package via ``straight``, Elacarte can automatically re-scan the repo for recipe changes and update your cookbook.
+* **User overrides:** You can always manually add or edit the recipes in the cookbook by editing the file directly. Without the ``:auto t`` flag, such recipes will not be automatically maintained by Elacarte.
+
+Recipe Discovery
+----------------
+
+"Discovery" is the process by which Elacarte traverses and adds new authoritative recipes to your local cookbook.
+
+When you run ``elacarte-discover-recipes``, the package performs a "clean room" installation:
+
+* It creates a temporary directory (``~/.emacs.d/elacarte/tmp``), and also temporarily clears ``straight.el``’s internal caches, for a "clean room" installation environment.
+* It clones the target repository into the temp directory to read its ``recipes.eld``, prompting to add these recipes to your cookbook.
+* It does this recursively until all primary recipes are discovered and added.
+
+Integration with Straight.el
+----------------------------
+
+The cookbook at ``~/.emacs.d/elacarte/recipes.eld`` implements the Straight recipe protocol. At initialization time, this local cookbook is registered and pushed to the front of ``straight-recipe-repositories``, ensuring that if a recipe exists in your Elacarte cookbook, **it takes precedence** over MELPA, GNU ELPA, or any other archive.
+
+What about Elpaca?
+------------------
+
+Although Elacarte is implemented in Straight, it could support interfacing with either Straight or Elpaca in user config. But support for Elpaca isn't implemented yet. Help with this would be valuable and greatly appreciated.
+
+Quick Start (for Straight.el users)
+===================================
+
+Place this config early in your Emacs init configuration, right after bootstrapping Straight and Use Package.
+
+1. **Install Elacarte**
+
+.. code-block:: elisp
+
+   (straight-use-package '(elacarte :host github :repo "countvajhula/elacarte"))
+
+2. **Create your local cookbook**
+
+This generates a local recipe repository that ``straight.el`` can use.
+
+.. code-block:: elisp
+
+   (require 'elacarte)
+   (elacarte-build-recipe-repository)
+   (elacarte-register-recipe-repository)
+
+3. **Discover a new package**
+
+Point Elacarte to a repository URL for a package you are interested in (and which advertises its recipes in a ``recipes.eld`` --- e.g., `Symex.el <https://github.com/drym-org/symex.el>`_ or `Mantra <https://github.com/countvajhula/mantra>`_). It will prompt you to add all discovered recipes (including dependencies) to your local cookbook.
+
+.. code-block:: text
+
+   M-x elacarte-discover-recipes-by-url RET https://github.com/drym-org/symex.el RET
+
+And that's it! Now you can configure the package in your Emacs config with ``use-package``, as usual, without inline recipes or worrying about dependencies or load order.
+
+For Package Authors
+===================
+
+To make your package "Elacarte-ready," simply place a ``recipes.eld`` file at the root of your repository:
+
+.. code-block:: elisp
+
+   ((my-package :host github :repo "user/my-package")
+    (my-dependency :host github :repo "user/my-dependency"))
+
+Now, when a user points Elacarte to your repo, it will automatically know how to build your package and where to find its dependencies.
+
+Note that the dependency recipe is treated as a *pointer* by Elacarte. It only needs to include enough information to be able to *find* the source repository, and need not be a full recipe (any non-location information in the recipe will simply be ignored by Elacarte, which will look for the primary recipe upstream).
+
+If the dependency repository isn't Elacarte-ready, please consider submitting a pull request or issue to add the canonical recipe upstream. If that's not possible for some reason, you can specify that your dependency recipe is a primary override by using ``:primary t``, which will cause Elacarte to use the recipe as is and prevent further traversal. **This is strongly discouraged**, however, and should only be done as a last resort, as it goes against the principle of appropriate authority.
+
+*Elacarte is currently a proof-of-concept. It is intended to be used alongside package managers such as Straight (currently supported) or Elpaca (as yet unsupported) to complete the toolset of the modern Emacs user.*
 
 Non-Ownership
 -------------
