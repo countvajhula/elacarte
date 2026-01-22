@@ -27,16 +27,16 @@ While tools like ``straight.el`` and ``elpaca`` allow you to install from any Gi
 The Problems Today
 ------------------
 
-* **Fragile configs:** To install a package not on a centralized archive such as ELPA, you must write an "inline recipe" in your init file. This conflates configuration with installation, leading to fragile load orders.
+* **Fragile configs:** To install a package not on a centralized archive such as ELPA, you must write an "inline recipe" in your init file. This conflates configuration with installation, leading to fragile ordering issues in your config that are *not* addressed by Use Package's ``:after`` keyword (which affects *loading* rather than *installation*).
 * **Coordination bottlenecks:** If a developer refactors their folder structure, they must submit a PR to a centralized archive and wait for approval before users can safely update.
-* **Testing friction:** Testing whether a package is "installable" is currently opaque, often requiring specialized third-party sandboxes instead of simple local checks.
+* **Testing friction:** Code quality checks such as testing whether a package is "installable" are currently opaque, often requiring specialized third-party interactions and sandboxes instead of simple local checks.
 
 The Elacarte Solution
 ---------------------
 
-* **Decentralized discovery:** Authors include a ``recipes.eld`` in their repo. Elacarte finds it, reads it, and handles the rest.
-* **Recursive resolution:** If a package depends on another non-standard package, Elacarte follows the "pointer" to the dependency’s repo and discovers its authoritative recipe.
-* **Clean separation:** Keep your ``init.el`` focused on *configuration* (how you use the package) while Elacarte handles *installation* (how you get the package).
+* **Local Cookbook:** Elacarte enables you to conveniently curate a local, authoritative cookbook containing recipes. This keeps your ``init.el`` focused on *configuration* (how you use the package) while Elacarte informs *installation* (how you get and build the package), consistently across your entire config.
+* **Decentralized discovery:** Authors include a ``recipes.eld`` in their repo. Elacarte finds it, reads it, and handles the rest. If a package depends on another non-standard package, Elacarte follows the "pointer" to the dependency’s repo and discovers its authoritative recipe, recursively.
+* **Self-contained:** Elacarte enables tools to find the information they need locally and enables you to conveniently provide that information, avoiding opaque third party interactions, powering tools like `Elci <https://github.com/countvajhula/elci>`_).
 
 How It Works: Primary vs. Pointer
 ---------------------------------
@@ -52,7 +52,7 @@ This ensures you always get the canonical build instructions defined by the peop
 Ultimate Authority
 ------------------
 
-Elacarte's cookbook can be easily edited by you, and it takes precedence over third party recipe repositories and canonical recipes provided by the developer.
+Elacarte's cookbook can be easily edited by you, and it takes precedence over community-maintained archives (like MELPA) and the canonical recipes provided by developers.
 
 This gives you ultimate authority over the recipes used in your own Emacs, without necessitating any fragile workarounds such as employing inline recipes.
 
@@ -76,7 +76,7 @@ Recipe Discovery
 
 When you run ``elacarte-discover-recipes``, the package performs a "clean room" installation:
 
-* It creates a temporary directory (``~/.emacs.d/elacarte/tmp``), and also temporarily clears ``straight.el``’s internal caches, for a "clean room" installation environment.
+* It creates a temporary directory (``~/.emacs.d/elacarte/tmp``), and also temporarily clears ``straight.el``’s internal caches within the scope of the discovery process, ensuring your global Emacs state remains untouched.
 * It clones the target repository into the temp directory to read its ``recipes.eld``, prompting to add these recipes to your cookbook.
 * It does this recursively until all primary recipes are discovered and added.
 
@@ -133,9 +133,24 @@ To make your package "Elacarte-ready," simply place a ``recipes.eld`` file at th
 
 Now, when a user points Elacarte to your repo, it will automatically know how to build your package and where to find its dependencies.
 
-Note that the dependency recipe is treated as a *pointer* by Elacarte. It only needs to include enough information to be able to *find* the source repository, and need not be a full recipe (any non-location information in the recipe will simply be ignored by Elacarte, which will look for the primary recipe upstream).
+Note that the dependency recipe is treated as a *pointer* by Elacarte. It only needs to include enough information to be able to *find* the authoritative source, and need not be a full recipe (any non-addressing information in the recipe will simply be ignored by Elacarte, which will look for the primary recipe upstream).
 
 If the dependency repository isn't Elacarte-ready, please consider submitting a pull request or issue to add the canonical recipe upstream. If that's not possible for some reason, you can specify that your dependency recipe is a primary override by using ``:primary t``, which will cause Elacarte to use the recipe as is and prevent further traversal. **This is strongly discouraged**, however, and should only be done as a last resort, as it goes against the principle of appropriate authority.
+
+Sample ``recipes.eld``
+----------------------
+
+Here are some examples of projects advertising their recipes in a ``recipes.eld``, that you could follow in your own projects:
+
+Single-package project
+~~~~~~~~~~~~~~~~~~~~~~
+
+- `Mantra <https://github.com/countvajhula/mantra/blob/main/recipes.eld>`__
+
+Multi-package project with custom dependencies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- `Symex <https://github.com/drym-org/symex.el/blob/main/recipes.eld>`__
 
 *Elacarte is currently a proof-of-concept. It is intended to be used alongside package managers such as Straight (currently supported) or Elpaca (as yet unsupported) to complete the toolset of the modern Emacs user.*
 
