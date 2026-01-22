@@ -2,9 +2,9 @@
 elacarte
 ========
 
---------------------------------------------------
-Appropriate Authority for Emacs Package Recipes.
---------------------------------------------------
+--------------------------------------
+*Authoritative Emacs Package Recipes.*
+--------------------------------------
 
 Elacarte is a decentralized recipe discovery engine for Emacs. It allows package authors to advertise how their packages should be built directly within their own repositories, and empowers users to aggregate these authoritative recipes into a curated, local "cookbook."
 
@@ -36,7 +36,7 @@ The Elacarte Solution
 
 * **Local Cookbook:** Elacarte enables you to conveniently curate a local, authoritative cookbook containing recipes. This keeps your ``init.el`` focused on *configuration* (how you use the package) while Elacarte informs *installation* (how you get and build the package), consistently across your entire config.
 * **Decentralized discovery:** Authors include a ``recipes.eld`` in their repo. Elacarte finds it, reads it, and handles the rest. If a package depends on another non-standard package, Elacarte follows the "pointer" to the dependency’s repo and discovers its authoritative recipe, recursively.
-* **Self-contained:** Elacarte enables tools to find the information they need locally and enables you to conveniently provide that information, avoiding opaque third party interactions, powering tools like `Elci <https://github.com/countvajhula/elci>`_).
+* **Self-contained:** Elacarte enables tools to find the information they need locally and enables you to conveniently provide that information, avoiding opaque third party interactions, powering tools like `Elci <https://github.com/countvajhula/elci>`_.
 
 How It Works: Primary vs. Pointer
 ---------------------------------
@@ -52,7 +52,7 @@ This ensures you always get the canonical build instructions defined by the peop
 Ultimate Authority
 ------------------
 
-Elacarte's cookbook can be easily edited by you, and it takes precedence over community-maintained archives (like MELPA) and the canonical recipes provided by developers.
+Elacarte's cookbook can be easily edited by you, and it takes precedence over canonical recipes provided by developers and community-maintained archives (like MELPA).
 
 This gives you ultimate authority over the recipes used in your own Emacs, without necessitating any fragile workarounds such as employing inline recipes.
 
@@ -124,12 +124,14 @@ And that's it! Now you can configure the package in your Emacs config with ``use
 For Package Authors
 ===================
 
-To make your package "Elacarte-ready," simply place a ``recipes.eld`` file at the root of your repository:
+To make your package "Elacarte-ready," simply place a ``recipes.eld`` file at the root of your repository, containing a `Straight.el-compatible recipe <https://github.com/radian-software/straight.el?tab=readme-ov-file#the-recipe-format>`__ that Emacs should use to install your package (real-world examples are included below). This is the same kind as you might publish on a central archive such as MELPA. You can optionally include pointers to dependencies --- this is *required* if these dependencies are not listed on centralized archives. Your ``recipes.eld`` should contain a *list* of recipes, even if there is only one recipe. It should resemble:
 
 .. code-block:: elisp
 
-   ((my-package :host github :repo "user/my-package")
-    (my-dependency :host github :repo "user/my-dependency"))
+   ( ; recipes.eld always contains a *list* of recipes
+    (my-package :host github :repo "me/my-package") ; and any special :files, etc.
+    (my-dependency :host github :repo "someuser/my-dependency")
+   )
 
 Now, when a user points Elacarte to your repo, it will automatically know how to build your package and where to find its dependencies.
 
@@ -154,7 +156,36 @@ Multi-package project with custom dependencies
 
 *Elacarte is currently a proof-of-concept. It is intended to be used alongside package managers such as Straight (currently supported) or Elpaca (as yet unsupported) to complete the toolset of the modern Emacs user.*
 
+Testing
+-------
+
+Manually
+~~~~~~~~
+
+Using Elacarte gives you end-to-end control over the installation and configuration of your package. You can test the validity of your install recipe simply by installing the package yourself! To do this, you could:
+
+1. Run ``M-x elacarte-discover-recipes-by-url RET https://host.com/my/repo/url RET``.
+
+Or, if you prefer, evaluate this expression using ``C-x C-e``.
+
+.. code-block:: elisp
+
+   (elacarte-discover-recipes-by-url "https://host.com/my/repo/url")
+
+Note that the URL here can even be a local file path, like ``~/path/to/my-package``. However, keep in mind that Elacarte will still follow the instructions *inside* the recipe. If you are trying to test recipe changes prior to pushing them remotely, it is often better to simply **override** the recipe directly in your Emacs's Elacarte cookbook (e.g., by adding a temporary ``:local-repo`` entry) to verify the build logic.
+
+2. Use your package in your own config.
+
+.. code-block:: elisp
+
+   (use-package my-package)
+
+Automatically
+~~~~~~~~~~~~~
+
+Try `Elci <https://github.com/countvajhula/elci>`_. It's built using Elacarte and gives you automated and transparent code quality checks --- including for installability --- that can be run both locally as well as on hosted CI infrastructure.
+
 Non-Ownership
--------------
+=============
 
 The freely released, copyright-free work in this repository represents an investment in a better way of doing things called attribution-based economics. Attribution-based economics is based on the simple idea that we gain more by giving more, not by holding on to things that, truly, we could only create because we, in our turn, received from others. As it turns out, an economic system based on attribution -- where those who give more are more empowered -- is significantly more efficient than capitalism while also being stable and fair (unlike capitalism, on both counts), giving it transformative power to elevate the human condition and address the problems that face us today along with a host of others that have been intractable since the beginning. You can help make this a reality by releasing your work in the same way -- freely into the public domain in the simple hope of providing value. Learn more about attribution-based economics at `drym.org <https://drym.org>`_, tell your friends, do your part.
