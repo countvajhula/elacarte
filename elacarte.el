@@ -35,9 +35,6 @@
   (expand-file-name "elacarte" user-emacs-directory)
   "The base path for elacarte operations.")
 
-(defvar elacarte-repo-name "elacarte-cookbook"
-  "The name of the local recipe repository to be built.")
-
 (defconst elacarte-recipes-filename "recipes.eld"
   "The conventional name of the file containing recipes.
 
@@ -58,6 +55,11 @@ themselves, or explicitly overridden by you.")
   (expand-file-name elacarte-cookbook-filename
                     elacarte-base-dir)
   "The master file containing the list of local recipes.")
+
+(defvar elacarte-repo-name
+  (concat "elacarte-"
+          (file-name-base elacarte-cookbook-filename))
+  "The name of the local recipe repository to be built.")
 
 (defvar elacarte-temp-dir
   (expand-file-name "tmp" elacarte-base-dir)
