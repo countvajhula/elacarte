@@ -88,6 +88,9 @@ themselves, or explicitly overridden by you."
 
 (defun elacarte--write (file string)
   "Write STRING to FILE."
+  (let ((dir (file-name-directory file)))
+    (unless (file-directory-p dir)
+      (make-directory dir t)))
   (with-temp-file file
     (insert string)))
 
@@ -104,7 +107,6 @@ containing no recipes (but still formatted as a cookbook).
 
 If the file already exists, then do nothing."
   (unless (file-exists-p cookbook)
-    (make-directory (file-name-directory cookbook) t)
     (elacarte--write cookbook
                      "()")))
 
