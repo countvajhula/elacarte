@@ -653,9 +653,10 @@ Interactively, also uses the value of `elacarte-cookbook'."
 
 (defun elacarte-use-cookbook (&optional cookbook)
   "Build a recipe repository for COOKBOOK and register it with Straight."
-  (elacarte--make-cookbook cookbook)
-  (elacarte--generate-recipe-repository cookbook)
-  (elacarte--serve-recipe-repository cookbook))
+  (let ((cookbook (or cookbook elacarte-cookbook)))
+    (elacarte--make-cookbook cookbook)
+    (elacarte--generate-recipe-repository cookbook)
+    (elacarte--serve-recipe-repository cookbook)))
 
 (defun elacarte-update-recipe (package-name)
   "Update the recipe for PACKAGE-NAME from its source repo.
