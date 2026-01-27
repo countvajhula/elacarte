@@ -684,17 +684,17 @@ This function is intended to be run from the
           (elacarte--cleanup-temp-dir))
       (warn "elacarte-update-recipe: No recipe found for '%s'" package-name))))
 
-(defun elacarte-activate ()
+;; TODO: synchronization is untested
+(defun elacarte-enable-synchronization ()
   "Hook into Straight, ensuring that recipes are updated before packages are built."
   (add-hook 'straight-use-package-pre-build-functions
             #'elacarte-update-recipe))
 
-(defun elacarte-deactivate ()
-  "Hook into Straight, ensuring that recipes are updated before packages are built."
+(defun elacarte-disable-synchronization ()
+  "Disable recipe synchronization."
   (remove-hook 'straight-use-package-pre-build-functions
                #'elacarte-update-recipe))
 
 
 (provide 'elacarte)
-
 ;;; elacarte.el ends here
