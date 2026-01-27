@@ -61,7 +61,7 @@ conveniently install those packages.")
   "The default filename to use for your cookbook.")
 
 (defgroup elacarte nil
-  "Authoritative Emacs package recipes."
+  "Decentralized, authoritative Emacs package cookbooks."
   :group 'applications)
 
 (defcustom elacarte-cookbook

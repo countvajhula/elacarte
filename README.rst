@@ -2,9 +2,9 @@
 elacarte
 ========
 
---------------------------------------
-*Authoritative Emacs Package Recipes.*
---------------------------------------
+-------------------------------------------------------
+*Decentralized, authoritative Emacs package cookbooks.*
+-------------------------------------------------------
 
 Elacarte is a decentralized recipe discovery engine for Emacs. It allows package authors to advertise how their packages should be built directly within their own repositories, and empowers users to aggregate these authoritative recipes into a curated, local "cookbook."
 
