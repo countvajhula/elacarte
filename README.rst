@@ -99,19 +99,17 @@ Place this config early in your Emacs init configuration, right after bootstrapp
 
 .. code-block:: elisp
 
-   (straight-use-package '(elacarte :host github :repo "countvajhula/elacarte"))
+   (use-package elacarte
+     :straight
+     (elacarte :host github :repo "countvajhula/elacarte")
+     :custom
+     (elacarte-main-cookbook "~/.emacs.d/elacarte/cookbook.eld")
+     :config
+     (elacarte-use-cookbook elacarte-main-cookbook)
 
-2. **Create your local cookbook**
+This config generates a local recipe repository at ``~/.emacs.d/elacarte/cookbook.eld`` that ``straight.el`` can use.
 
-This generates a local recipe repository that ``straight.el`` can use.
-
-.. code-block:: elisp
-
-   (require 'elacarte)
-   (elacarte-build-recipe-repository)
-   (elacarte-register-recipe-repository)
-
-3. **Discover a new package**
+2. **Discover a new package**
 
 Point Elacarte to a repository URL for a package you are interested in (and which advertises its recipes in a ``recipes.eld`` --- e.g., `Symex.el <https://github.com/drym-org/symex.el>`_ or `Mantra <https://github.com/countvajhula/mantra>`_). It will prompt you to add all discovered recipes (including dependencies) to your local cookbook.
 
@@ -120,6 +118,11 @@ Point Elacarte to a repository URL for a package you are interested in (and whic
    M-x elacarte-discover-recipes-by-url RET https://github.com/drym-org/symex.el RET
 
 And that's it! Now you can configure the package in your Emacs config with ``use-package``, as usual, without inline recipes or worrying about dependencies or load order.
+
+Customizing
+-----------
+
+By default, Elacarte APIs use the cookbook you've configured in ``elacarte-main-cookbook``. If you'd like to use a different cookbook, just pass the desired cookbook (as a filename, e.g., ``~/.emacs.d/elacarte/work-laptop.eld``) as an argument to functions that accept a cookbook argument. For the interactive APIs that don't, such as the main recipe discovery APIs, you can let-bind ``elacarte-main-cookbook`` to whatever cookbook you'd like to use during invocation of the API.
 
 For Package Authors
 ===================

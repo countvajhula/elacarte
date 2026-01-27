@@ -36,30 +36,37 @@
   "The base path for elacarte operations.")
 
 (defconst elacarte-recipes-filename "recipes.eld"
-  "The conventional name of the file containing recipes.
+  "The conventional file advertising project recipes.
 
 Any project would advertise recipes using this filename at the top
 level of the source repository, and Elacarte would allow users to
 conveniently install those packages.")
 
-(defcustom elacarte-cookbook-filename "cookbook.eld"
-  "The name of the file containing authoritative recipes.
+(defconst elacarte-cookbook-default-filename "cookbook.eld"
+  "The default filename to use for your cookbook.")
+
+(defgroup elacarte nil
+  "Authoritative Emacs package recipes."
+  :group 'applications)
+
+(defcustom elacarte-main-cookbook
+  (expand-file-name elacarte-cookbook-default-filename
+                    elacarte-base-dir)
+  "The master file containing the list of local recipes.
 
 This file houses your curated and preferred recipes to be used by
 Emacs for finding and building packages. These recipes are
 \"authoritative\" in the sense that they are either discovered from
 the package source (e.g., Git repo) maintained by the authors
-themselves, or explicitly overridden by you.")
+themselves, or explicitly overridden by you."
+  :type 'string
+  :group 'elacarte)
 
-(defvar elacarte-cookbook-file
-  (expand-file-name elacarte-cookbook-filename
-                    elacarte-base-dir)
-  "The master file containing the list of local recipes.")
-
-(defvar elacarte-repo-name
-  (concat "elacarte-"
-          (file-name-base elacarte-cookbook-filename))
-  "The name of the local recipe repository to be built.")
+(defun elacarte--recipe-repository-name (&optional cookbook-file)
+  "The name of the recipe repository for COOKBOOK-FILE"
+  (let ((cookbook-file (or cookbook-file elacarte-cookbook-default-filename)))
+    (concat "elacarte-"
+            (file-name-base cookbook-file))))
 
 (defvar elacarte-temp-dir
   (expand-file-name "tmp" elacarte-base-dir)
@@ -89,19 +96,27 @@ themselves, or explicitly overridden by you.")
   (let ((print-level nil) (print-length nil)) ; Ensure full printing.
     (pp-to-string obj)))
 
+(defun elacarte--make-cookbook (cookbook-file)
+  "Create a cookbook at COOKBOOK-FILE.
+
+If the file doesn't already exist, create an empty cookbook, i.e., one
+containing no recipes (but still formatted as a cookbook).
+
+If the file already exists, then do nothing."
+  (unless (file-exists-p cookbook-file)
+    (make-directory (file-name-directory cookbook-file) t)
+    (elacarte--write cookbook-file
+                     "()")))
+
 (defun elacarte--remove-recipe (package-name recipes)
   "Remove PACKAGE-NAME from RECIPES."
   (cl-remove-if
    (lambda (r) (equal (car r) package-name))
    recipes))
 
-(defun elacarte-remove-recipe (package-name &optional noconfirm)
-  "Remove the recipe for PACKAGE-NAME from `elacarte-cookbook-file'."
-  (interactive
-   (let ((recipes (elacarte--read elacarte-cookbook-file)))
-     (list (intern (completing-read "Remove recipe for package: "
-                                    (mapcar #'car recipes))))))
-  (let* ((existing-recipes (elacarte--read elacarte-cookbook-file))
+(defun elacarte-remove-recipe-from-cookbook (package-name cookbook-file &optional noconfirm)
+  "Remove recipe for PACKAGE-NAME from COOKBOOK-FILE."
+  (let* ((existing-recipes (elacarte--read cookbook-file))
          (recipe-to-remove (assoc package-name existing-recipes)))
     (unless recipe-to-remove
       (user-error "No recipe found for package '%s'" package-name))
@@ -110,12 +125,62 @@ themselves, or explicitly overridden by you.")
               (y-or-n-p (format "Really remove recipe for '%s'?" package-name)))
       (let ((updated-recipes (elacarte--remove-recipe package-name
                                                       existing-recipes)))
-        (elacarte--write elacarte-cookbook-file
+        (elacarte--write cookbook-file
                          (elacarte--pretty-print updated-recipes))
         (message "Recipe for '%s' removed." package-name)))))
 
+(defun elacarte-remove-recipe (package-name &optional noconfirm)
+  "Remove the recipe for PACKAGE-NAME from `elacarte-main-cookbook'."
+  (interactive
+   (let ((recipes (elacarte--read elacarte-main-cookbook)))
+     (list (intern (completing-read "Remove recipe for package: "
+                                    (mapcar #'car recipes))))))
+  (elacarte-remove-recipe-from-cookbook package-name
+                                        elacarte-main-cookbook
+                                        noconfirm))
+
+(defun elacarte-add-recipe-to-cookbook (recipe cookbook-file &optional replace auto)
+  "Add or update RECIPE in COOKBOOK-FILE."
+  (let* ((package-name (car recipe))
+         ;; recipes added by elacarte are managed automatically
+         ;; we mark these out in the recipes file to distinguish
+         ;; them from bespoke recipes added by the user
+         (recipe (if auto
+                     (cons package-name
+                           (plist-put (cdr recipe) :auto t))
+                   recipe)))
+
+    ;; 1. Read existing recipes, creating the file if it's missing.
+    (elacarte--make-cookbook cookbook-file)
+
+    ;; Check if a recipe for this package already exists.
+    (let* ((existing-recipes (elacarte--read cookbook-file))
+           (old-recipe (assoc package-name existing-recipes))
+           (old-auto (plist-get (cdr old-recipe) :auto)))
+
+      ;; 2. If the recipe exists and `replace` is nil, and it isn't an
+      ;; automatically maintained (i.e., by Elacarte) recipe, then
+      ;; signal an error.
+      (if (and old-recipe (not old-auto) (not replace))
+          ;; do nothing for this recipe
+          (warn "Recipe for '%s' already exists. Use a prefix argument to replace it." package-name)
+
+        ;; 3. Remove any old recipe for the same package to handle updates.
+        (let ((updated-recipes (elacarte--remove-recipe package-name
+                                                        existing-recipes)))
+
+          ;; 4. Add the new recipe to the front and write back to disk.
+          (elacarte--write cookbook-file
+                           (elacarte--pretty-print
+                            (cons recipe updated-recipes))))
+
+        (message "Recipe for '%s' %s %s"
+                 package-name
+                 (if old-recipe "updated in" "added to")
+                 (file-name-nondirectory cookbook-file))))))
+
 (defun elacarte-add-recipe (recipe &optional replace auto)
-  "Add or update RECIPE in `elacarte-cookbook-file'.
+  "Add or update RECIPE in `elacarte-main-cookbook'.
 
 When called interactively, prompts for the recipe as a Lisp expression.
 If a recipe for the same package already exists, it is
@@ -136,50 +201,13 @@ The file is created if it does not exist."
                      ;; this recipe is managed by the user, not by
                      ;; Elacarte
                      nil))
-
-  (let* (;; When called interactively, RECIPE is a string. We must parse it.
-         ;; `read-from-string` returns (OBJECT . CHARS-READ), so we take the CAR.
-         (recipe (if (stringp recipe) (car (read-from-string recipe)) recipe))
-         (package-name (car recipe))
-         ;; recipes added by elacarte are managed automatically
-         ;; we mark these out in the recipes file to distinguish
-         ;; them from bespoke recipes added by the user
-         (recipe (if auto
-                     (cons package-name
-                           (plist-put (cdr recipe) :auto t))
-                   recipe)))
-
-    ;; 1. Read existing recipes, creating the file if it's missing.
-    (unless (file-exists-p elacarte-cookbook-file)
-      (make-directory (file-name-directory elacarte-cookbook-file) t)
-      (elacarte--write elacarte-cookbook-file
-                       "()"))
-
-    ;; Check if a recipe for this package already exists.
-    (let* ((existing-recipes (elacarte--read elacarte-cookbook-file))
-           (old-recipe (assoc package-name existing-recipes))
-           (old-auto (plist-get (cdr old-recipe) :auto)))
-
-      ;; 2. If the recipe exists and `replace` is nil, and it isn't an
-      ;; automatically maintained (i.e., by Elacarte) recipe, then
-      ;; signal an error.
-      (if (and old-recipe (not old-auto) (not replace))
-          ;; do nothing for this recipe
-          (warn "Recipe for '%s' already exists. Use a prefix argument to replace it." package-name)
-
-        ;; 3. Remove any old recipe for the same package to handle updates.
-        (let ((updated-recipes (elacarte--remove-recipe package-name
-                                                        existing-recipes)))
-
-          ;; 4. Add the new recipe to the front and write back to disk.
-          (elacarte--write elacarte-cookbook-file
-                           (elacarte--pretty-print
-                            (cons recipe updated-recipes))))
-
-        (message "Recipe for '%s' %s %s"
-                 package-name
-                 (if old-recipe "updated in" "added to")
-                 (file-name-nondirectory elacarte-cookbook-file))))))
+  ;; When called interactively, RECIPE is a string. We must parse it.
+  ;; `read-from-string` returns (OBJECT . CHARS-READ), so we take the CAR.
+  (let ((recipe (if (stringp recipe) (car (read-from-string recipe)) recipe)))
+    (elacarte-add-recipe-to-cookbook recipe
+                                     elacarte-main-cookbook
+                                     replace
+                                     auto)))
 
 (defun elacarte-clean-room-install (recipe)
   "Install RECIPE in a clean room environment.
@@ -439,7 +467,7 @@ clone the repository specified in the recipe, read its
 recursively do the same for all recipes found therein.
 
 POINTER itself is only consulted to discover *where* to find valid
-package recipes. It is not itself added to `elacarte-cookbook-file'.
+package recipes. It is not itself added to `elacarte-main-cookbook'.
 Therefore, only fields like `:host` and `:repo`, etc., are required,
 and it need not be a complete recipe for a package. The pointed-to
 repo is expected to advertise those in its `recipes.eld`.
@@ -473,7 +501,7 @@ interactively), existing recipes will be overwritten."
   "A low-level utility to add all recipes in RECIPES-FILE.
 
 This does not do any validation or traversal, and simply adds the
-recipes in the file to `elacarte-cookbook-file', replacing any existing
+recipes in the file to `elacarte-main-cookbook', replacing any existing
 recipes for the same packages.
 
 This should generally not be used except by tools implementing
@@ -540,17 +568,18 @@ interactively), existing recipes will be overwritten."
                              noconfirm
                              notraverse))
 
-(defun elacarte-build-recipe-repository (&optional repo-name)
-  "Create a local recipe repository serving recipes from `elacarte-cookbook-file'.
+(defun elacarte--build-recipe-repository (&optional cookbook-file)
+  "Create a local recipe repository serving recipes from COOKBOOK-FILE.
 This simply generates the necessary protocol implementation file in
 the `elacarte-base-dir' that serves recipes from the master recipe list.
-If REPO-NAME is nil, defaults to `elacarte-repo-name'."
+If COOKBOOK-FILE is nil, defaults to `elacarte-main-cookbook'."
   (interactive)
-  (let* ((repo-name (or repo-name elacarte-repo-name))
+  (let* ((cookbook-file (or cookbook-file elacarte-main-cookbook))
+         (repo-name (elacarte--recipe-repository-name cookbook-file))
          (protocol-file (expand-file-name (concat repo-name ".el")
                                           elacarte-base-dir)))
-    (unless (file-exists-p elacarte-cookbook-file)
-      (user-error "Recipes file not found: %s" elacarte-cookbook-file))
+    (unless (file-exists-p cookbook-file)
+      (user-error "Recipes file not found: %s" cookbook-file))
 
     (message "Building '%s' recipe repository..." repo-name)
 
@@ -559,25 +588,26 @@ If REPO-NAME is nil, defaults to `elacarte-repo-name'."
            (template-content (elacarte--get-content-from-disk template-file))
            (protocol-content (format template-content
                                      repo-name
-                                     elacarte-cookbook-file)))
+                                     cookbook-file)))
       (elacarte--write protocol-file
                        protocol-content))
 
-    (let ((recipes (elacarte--read elacarte-cookbook-file)))
+    (let ((recipes (elacarte--read cookbook-file)))
       (message "Successfully built recipe repository %s serving %d recipes from %s"
                protocol-file
                (length recipes)
-               elacarte-cookbook-file))))
+               cookbook-file))))
 
-(defun elacarte-register-recipe-repository (&optional repo-name)
-  "Register the local recipe repository REPO-NAME with straight.el.
+(defun elacarte--register-recipe-repository (&optional cookbook-file)
+  "Register a local recipe repository for COOKBOOK-FILE with straight.el.
 This function assumes the repository has already been built with
-`elacarte-build-recipe-repository'. It performs the three steps
+`elacarte--build-recipe-repository'. It performs three steps
 necessary to make the repository known to the current Emacs session.
-If REPO-NAME is nil, defaults to `elacarte-repo-name'.
-Interactively, also uses the value of `elacarte-repo-name'."
-  (interactive (list elacarte-repo-name))
-  (let* ((repo-name (or repo-name elacarte-repo-name))
+If COOKBOOK-FILE is nil, defaults to `elacarte-main-cookbook'.
+Interactively, also uses the value of `elacarte-main-cookbook'."
+  (interactive (list elacarte-main-cookbook))
+  (let* ((cookbook-file (or cookbook-file elacarte-main-cookbook))
+         (repo-name (elacarte--recipe-repository-name cookbook-file))
          (protocol-file (expand-file-name (concat repo-name ".el")
                                           elacarte-base-dir)))
     (when (file-exists-p protocol-file)
@@ -595,6 +625,12 @@ Interactively, also uses the value of `elacarte-repo-name'."
       (add-to-list 'straight-recipe-repositories (intern repo-name))
 
       (message "--- '%s' registration complete ---" repo-name))))
+
+(defun elacarte-use-cookbook (&optional cookbook-file)
+  "Build a recipe repository for COOKBOOK-FILE and register it with Straight."
+  (elacarte--make-cookbook cookbook-file)
+  (elacarte--build-recipe-repository cookbook-file)
+  (elacarte--register-recipe-repository cookbook-file))
 
 (defun elacarte-update-recipe (package-name)
   "Update the recipe for PACKAGE-NAME from its source repo.
