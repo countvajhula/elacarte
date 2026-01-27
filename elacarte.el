@@ -35,6 +35,21 @@
   (expand-file-name "elacarte" user-emacs-directory)
   "The base path for elacarte operations.")
 
+(defvar elacarte-cookbooks-dir
+  (expand-file-name "cookbooks" elacarte-base-dir)
+  "The path where cookbooks are kept.")
+
+(defvar elacarte-elpa-dir
+  (expand-file-name ".elpa" elacarte-base-dir)
+  "The path where recipe repositories are generated.
+
+These generated files implement Straight.el's recipe repository
+protocol to serve recipes from cookbooks.")
+
+(defvar elacarte-temp-dir
+  (expand-file-name "tmp" elacarte-base-dir)
+  "Temporary directory for `elacarte` operations, like cloning repos.")
+
 (defconst elacarte-recipes-filename "recipes.eld"
   "The conventional file advertising project recipes.
 
@@ -51,7 +66,7 @@ conveniently install those packages.")
 
 (defcustom elacarte-main-cookbook
   (expand-file-name elacarte-cookbook-default-filename
-                    elacarte-base-dir)
+                    elacarte-cookbooks-dir)
   "The master file containing the list of local recipes.
 
 This file houses your curated and preferred recipes to be used by
@@ -67,10 +82,6 @@ themselves, or explicitly overridden by you."
   (let ((cookbook (or cookbook elacarte-main-cookbook)))
     (concat "elacarte-"
             (file-name-base cookbook))))
-
-(defvar elacarte-temp-dir
-  (expand-file-name "tmp" elacarte-base-dir)
-  "Temporary directory for `elacarte` operations, like cloning repos.")
 
 (defun elacarte--get-content-from-disk (file-path)
   "Return content of FILE-PATH as a string."
@@ -570,16 +581,17 @@ interactively), existing recipes will be overwritten."
                              noconfirm
                              notraverse))
 
-(defun elacarte--build-recipe-repository (&optional cookbook)
+(defun elacarte--generate-recipe-repository (&optional cookbook)
   "Create a local recipe repository serving recipes from COOKBOOK.
 This simply generates the necessary protocol implementation file in
-the `elacarte-base-dir' that serves recipes from the master recipe list.
+the `elacarte-elpa-dir' that could serve recipes from the master
+recipe list. It does not actually inform Straight about this file.
 If COOKBOOK is nil, defaults to `elacarte-main-cookbook'."
   (interactive)
   (let* ((cookbook (or cookbook elacarte-main-cookbook))
          (repo-name (elacarte--recipe-repository-name cookbook))
          (protocol-file (expand-file-name (concat repo-name ".el")
-                                          elacarte-base-dir)))
+                                          elacarte-elpa-dir)))
     (unless (file-exists-p cookbook)
       (user-error "Recipes file not found: %s" cookbook))
 
@@ -600,27 +612,38 @@ If COOKBOOK is nil, defaults to `elacarte-main-cookbook'."
                (length recipes)
                cookbook))))
 
-(defun elacarte--register-recipe-repository (&optional cookbook)
+(defun elacarte--serve-recipe-repository (&optional cookbook)
   "Register a local recipe repository for COOKBOOK with straight.el.
-This function assumes the repository has already been built with
-`elacarte--build-recipe-repository'. It performs three steps
-necessary to make the repository known to the current Emacs session.
+This function assumes the repository file has already been generated with
+`elacarte--generate-recipe-repository'. It performs three steps
+necessary to make the repository known to the current Emacs session:
+
+1. It uses straight-use-package to register the recipe repository as a
+package.
+
+2. It loads the module implementing Staight's recipe protocol so that
+Straight can use it to serve recipes.
+
+3. It adds this recipe repository to the head of
+`straight-recipe-repositories' so that it is prioritized over all
+other recipe sources.
+
 If COOKBOOK is nil, defaults to `elacarte-main-cookbook'.
 Interactively, also uses the value of `elacarte-main-cookbook'."
   (interactive (list elacarte-main-cookbook))
   (let* ((cookbook (or cookbook elacarte-main-cookbook))
          (repo-name (elacarte--recipe-repository-name cookbook))
          (protocol-file (expand-file-name (concat repo-name ".el")
-                                          elacarte-base-dir)))
+                                          elacarte-elpa-dir)))
     (when (file-exists-p protocol-file)
       (message "--- Registering '%s' recipe repository ---" repo-name)
 
       ;; 1. Make the package known to straight.el. `:build nil` is crucial.
       (straight-use-package
-       `(,(intern repo-name) :type nil :local-repo ,elacarte-base-dir :build nil))
+       `(,(intern repo-name) :type nil :local-repo ,elacarte-elpa-dir :build nil))
 
       ;; 2. Load the recipe protocol implementation.
-      (add-to-list 'load-path elacarte-base-dir)
+      (add-to-list 'load-path elacarte-elpa-dir)
       (require (intern repo-name))
 
       ;; 3. Add to the head of the list of repositories to search.
@@ -631,8 +654,8 @@ Interactively, also uses the value of `elacarte-main-cookbook'."
 (defun elacarte-use-cookbook (&optional cookbook)
   "Build a recipe repository for COOKBOOK and register it with Straight."
   (elacarte--make-cookbook cookbook)
-  (elacarte--build-recipe-repository cookbook)
-  (elacarte--register-recipe-repository cookbook))
+  (elacarte--generate-recipe-repository cookbook)
+  (elacarte--serve-recipe-repository cookbook))
 
 (defun elacarte-update-recipe (package-name)
   "Update the recipe for PACKAGE-NAME from its source repo.
