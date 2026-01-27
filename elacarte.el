@@ -57,14 +57,14 @@ Any project would advertise recipes using this filename at the top
 level of the source repository, and Elacarte would allow users to
 conveniently install those packages.")
 
-(defconst elacarte-cookbook-default-filename "cookbook.eld"
+(defconst elacarte-cookbook-default-filename "my-cookbook.eld"
   "The default filename to use for your cookbook.")
 
 (defgroup elacarte nil
   "Authoritative Emacs package recipes."
   :group 'applications)
 
-(defcustom elacarte-main-cookbook
+(defcustom elacarte-cookbook
   (expand-file-name elacarte-cookbook-default-filename
                     elacarte-cookbooks-dir)
   "The master file containing the list of local recipes.
@@ -79,7 +79,7 @@ themselves, or explicitly overridden by you."
 
 (defun elacarte--recipe-repository-name (&optional cookbook)
   "The name of the recipe repository for COOKBOOK"
-  (let ((cookbook (or cookbook elacarte-main-cookbook)))
+  (let ((cookbook (or cookbook elacarte-cookbook)))
     (concat "elacarte-"
             (file-name-base cookbook))))
 
@@ -143,13 +143,13 @@ If the file already exists, then do nothing."
         (message "Recipe for '%s' removed." package-name)))))
 
 (defun elacarte-remove-recipe (package-name &optional noconfirm)
-  "Remove the recipe for PACKAGE-NAME from `elacarte-main-cookbook'."
+  "Remove the recipe for PACKAGE-NAME from `elacarte-cookbook'."
   (interactive
-   (let ((recipes (elacarte--read elacarte-main-cookbook)))
+   (let ((recipes (elacarte--read elacarte-cookbook)))
      (list (intern (completing-read "Remove recipe for package: "
                                     (mapcar #'car recipes))))))
   (elacarte-remove-recipe-from-cookbook package-name
-                                        elacarte-main-cookbook
+                                        elacarte-cookbook
                                         noconfirm))
 
 (defun elacarte-add-recipe-to-cookbook (recipe cookbook &optional replace auto)
@@ -193,7 +193,7 @@ If the file already exists, then do nothing."
                  (file-name-nondirectory cookbook))))))
 
 (defun elacarte-add-recipe (recipe &optional replace auto)
-  "Add or update RECIPE in `elacarte-main-cookbook'.
+  "Add or update RECIPE in `elacarte-cookbook'.
 
 When called interactively, prompts for the recipe as a Lisp expression.
 If a recipe for the same package already exists, it is
@@ -218,7 +218,7 @@ The file is created if it does not exist."
   ;; `read-from-string` returns (OBJECT . CHARS-READ), so we take the CAR.
   (let ((recipe (if (stringp recipe) (car (read-from-string recipe)) recipe)))
     (elacarte-add-recipe-to-cookbook recipe
-                                     elacarte-main-cookbook
+                                     elacarte-cookbook
                                      replace
                                      auto)))
 
@@ -480,7 +480,7 @@ clone the repository specified in the recipe, read its
 recursively do the same for all recipes found therein.
 
 POINTER itself is only consulted to discover *where* to find valid
-package recipes. It is not itself added to `elacarte-main-cookbook'.
+package recipes. It is not itself added to `elacarte-cookbook'.
 Therefore, only fields like `:host` and `:repo`, etc., are required,
 and it need not be a complete recipe for a package. The pointed-to
 repo is expected to advertise those in its `recipes.eld`.
@@ -514,7 +514,7 @@ interactively), existing recipes will be overwritten."
   "A low-level utility to add all recipes in RECIPES-FILE.
 
 This does not do any validation or traversal, and simply adds the
-recipes in the file to `elacarte-main-cookbook', replacing any existing
+recipes in the file to `elacarte-cookbook', replacing any existing
 recipes for the same packages.
 
 This should generally not be used except by tools implementing
@@ -586,9 +586,9 @@ interactively), existing recipes will be overwritten."
 This simply generates the necessary protocol implementation file in
 the `elacarte-elpa-dir' that could serve recipes from the master
 recipe list. It does not actually inform Straight about this file.
-If COOKBOOK is nil, defaults to `elacarte-main-cookbook'."
+If COOKBOOK is nil, defaults to `elacarte-cookbook'."
   (interactive)
-  (let* ((cookbook (or cookbook elacarte-main-cookbook))
+  (let* ((cookbook (or cookbook elacarte-cookbook))
          (repo-name (elacarte--recipe-repository-name cookbook))
          (protocol-file (expand-file-name (concat repo-name ".el")
                                           elacarte-elpa-dir)))
@@ -628,10 +628,10 @@ Straight can use it to serve recipes.
 `straight-recipe-repositories' so that it is prioritized over all
 other recipe sources.
 
-If COOKBOOK is nil, defaults to `elacarte-main-cookbook'.
-Interactively, also uses the value of `elacarte-main-cookbook'."
-  (interactive (list elacarte-main-cookbook))
-  (let* ((cookbook (or cookbook elacarte-main-cookbook))
+If COOKBOOK is nil, defaults to `elacarte-cookbook'.
+Interactively, also uses the value of `elacarte-cookbook'."
+  (interactive (list elacarte-cookbook))
+  (let* ((cookbook (or cookbook elacarte-cookbook))
          (repo-name (elacarte--recipe-repository-name cookbook))
          (protocol-file (expand-file-name (concat repo-name ".el")
                                           elacarte-elpa-dir)))
