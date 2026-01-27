@@ -105,10 +105,29 @@ themselves, or explicitly overridden by you."
   (with-temp-file file
     (insert string)))
 
-(defun elacarte--pretty-print (obj)
-  "A readable string representation of OBJ."
-  (let ((print-level nil) (print-length nil)) ; Ensure full printing.
-    (pp-to-string obj)))
+(defun elacarte--pretty-print (recipes)
+  "A readable string representation of RECIPES, sorted alphabetically."
+  (let ((print-level nil)
+        (print-length nil)
+        ;; Sort by package name (the car of the recipe).
+        (sorted-recipes (sort (copy-sequence recipes)
+                              (lambda (a b)
+                                (string< (symbol-name (car a))
+                                         (symbol-name (car b)))))))
+    (pp-to-string sorted-recipes)))
+
+(defun elacarte-format-cookbook (&optional cookbook)
+  "Read, sort, and pretty-print the recipes in COOKBOOK.
+If COOKBOOK is nil, defaults to `elacarte-cookbook'."
+  (interactive (list (read-file-name "Format cookbook: "
+                                     elacarte-cookbooks-dir
+                                     elacarte-cookbook)))
+  (let* ((cookbook (or cookbook elacarte-cookbook))
+         (recipes (elacarte--read cookbook)))
+    (elacarte--write cookbook (elacarte--pretty-print recipes))
+    (message "Formatted and sorted %d recipes in %s."
+             (length recipes)
+             (file-name-nondirectory cookbook))))
 
 (defun elacarte--make-cookbook (cookbook)
   "Create a COOKBOOK.
