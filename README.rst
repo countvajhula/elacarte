@@ -61,10 +61,12 @@ Technical Implementation
 
 Elacarte operates as a **pre-processor for your package manager**. It doesn't replace the build logic of ``straight.el``; instead, it enables you to curate a local, overriding, recipe repository ("cookbook") that Straight is made aware of via ``straight-recipe-repositories``.
 
+More generally, Elacarte allows you to create and manipulate *cookbooks* which contain authoritative recipes. You can use any of them or even more than one of them in tandem as the recipe authority in your Emacs.
+
 Cookbook
 --------
 
-Elacarte maintains a master file at ``~/.emacs.d/elacarte/recipes.eld``. This file is the source of truth for your personal Emacs flavor, and it can be maintained and versioned along with the rest of your init config.
+Elacarte maintains a master file at ``~/.emacs.d/elacarte/cookbooks/cookbook.eld``. This file is the source of truth for your personal Emacs flavor, and it can be maintained and versioned along with the rest of your init config.
 
 * **Auto-updates:** Canonical recipes added by "discovery" are marked with ``:auto t``. When you update a package via ``straight``, Elacarte can automatically re-scan the repo for recipe changes and update your cookbook.
 * **User overrides:** You can always manually add or edit the recipes in the cookbook by editing the file directly. Without the ``:auto t`` flag, such recipes will not be automatically maintained by Elacarte.
@@ -83,7 +85,7 @@ When you run ``elacarte-discover-recipes``, the package performs a "clean room" 
 Integration with Straight.el
 ----------------------------
 
-The cookbook at ``~/.emacs.d/elacarte/recipes.eld`` implements the Straight recipe protocol. At initialization time, this local cookbook is registered and pushed to the front of ``straight-recipe-repositories``, ensuring that if a recipe exists in your Elacarte cookbook, **it takes precedence** over MELPA, GNU ELPA, or any other archive.
+The cookbook at ``~/.emacs.d/elacarte/cookbooks/cookbook.eld`` is served by a corresponding auto-generated file, ``~/.emacs.d/elacarte/.elpa/elacarte-cookbook.el``, which implements the Straight recipe protocol. At initialization time, this local cookbook is registered and pushed to the front of ``straight-recipe-repositories``, ensuring that if a recipe exists in your Elacarte cookbook, **it takes precedence** over MELPA, GNU ELPA, or any other archive.
 
 What about Elpaca?
 ------------------
@@ -103,11 +105,11 @@ Place this config early in your Emacs init configuration, right after bootstrapp
      :straight
      (elacarte :host github :repo "countvajhula/elacarte")
      :custom
-     (elacarte-main-cookbook "~/.emacs.d/elacarte/cookbook.eld")
+     (elacarte-main-cookbook "~/.emacs.d/elacarte/cookbooks/cookbook.eld")
      :config
      (elacarte-use-cookbook elacarte-main-cookbook)
 
-This config generates a local recipe repository at ``~/.emacs.d/elacarte/cookbook.eld`` that ``straight.el`` can use.
+This config generates a local recipe repository at ``~/.emacs.d/elacarte/cookbooks/cookbook.eld`` that ``straight.el`` can use.
 
 2. **Discover a new package**
 
@@ -122,7 +124,7 @@ And that's it! Now you can configure the package in your Emacs config with ``use
 Customizing
 -----------
 
-By default, Elacarte APIs use the cookbook you've configured in ``elacarte-main-cookbook``. If you'd like to use a different cookbook, just pass the desired cookbook (as a filename, e.g., ``~/.emacs.d/elacarte/work-laptop.eld``) as an argument to functions that accept a cookbook argument. For the interactive APIs that don't, such as the main recipe discovery APIs, you can let-bind ``elacarte-main-cookbook`` to whatever cookbook you'd like to use during invocation of the API.
+By default, Elacarte APIs use the cookbook you've configured in ``elacarte-main-cookbook``. If you'd like to use a different cookbook, just pass the desired cookbook (as a filename, e.g., ``~/.emacs.d/elacarte/cookbooks/work-laptop.eld``) as an argument to functions that accept a cookbook argument. For the interactive APIs that don't, such as the main recipe discovery APIs, you can let-bind ``elacarte-main-cookbook`` to whatever cookbook you'd like to use during invocation of the API.
 
 For Package Authors
 ===================
