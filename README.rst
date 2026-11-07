@@ -6,17 +6,17 @@ elacarte
 *Decentralized, authoritative Emacs package cookbooks.*
 -------------------------------------------------------
 
-Elacarte is a decentralized recipe discovery engine for Emacs. It allows package authors to advertise how their packages should be built directly within their own repositories, and empowers users to aggregate these authoritative recipes into a curated, local "cookbook."
+Elacarte is a decentralized recipe discovery engine for Emacs. It allows package authors to advertise how their packages should be built directly within their own repositories instead of relying on third party package archives, and empowers users to aggregate these authoritative recipes into a curated, local "cookbook," restoring ultimate authority to the user.
 
-The Core Philosophy: Appropriate Authority
-==========================================
+Principle of Appropriate Authority
+==================================
 
 The current Emacs ecosystem often relies on centralized archives to define how a package is built. Elacarte restores a natural **chain of authority**:
 
     **You (The User) > Package Authors > Centralized Archives**
 
 1. **You** are the ultimate authority on what runs in your Emacs. You can override any recipe.
-2. **Package authors** are the authority on how their code should be built and what it depends on.
+2. **Package authors** are the authority on how their code should be built *canonically* and what it depends on.
 3. **Centralized archives** are excellent for *discovery*, but they should not be the bottleneck for *distribution*.
 
 Why Elacarte?
@@ -29,14 +29,14 @@ The Problems Today
 
 * **Fragile configs:** To install a package not on a centralized archive such as ELPA, you must write an "inline recipe" in your init file. This conflates configuration with installation, leading to fragile ordering issues in your config that are *not* addressed by Use Package's ``:after`` keyword (which affects *loading* rather than *installation*).
 * **Coordination bottlenecks:** If a developer refactors their folder structure, they must submit a PR to a centralized archive and wait for approval before users can safely update.
-* **Testing friction:** Code quality checks such as testing whether a package is "installable" are currently opaque, often requiring specialized third-party interactions and sandboxes instead of simple local checks.
+* **Testing friction:** Code quality checks used in developer workflows (e.g., testing whether a package is installable) are currently opaque, requiring specialized third-party interactions and sandboxes instead of simple local checks.
 
 The Elacarte Solution
 ---------------------
 
 * **Local Cookbook:** Elacarte enables you to conveniently curate a local, authoritative cookbook containing recipes. This keeps your ``init.el`` focused on *configuration* (how you use the package) while Elacarte informs *installation* (how you get and build the package), consistently across your entire config.
-* **Decentralized discovery:** Authors include a ``recipes.eld`` in their repo. Elacarte finds it, reads it, and handles the rest. If a package depends on another non-standard package, Elacarte follows the "pointer" to the dependency’s repo and discovers its authoritative recipe, recursively.
-* **Self-contained:** Elacarte enables tools to find the information they need locally and enables you to conveniently provide that information, avoiding opaque third party interactions, powering tools like `Elci <https://github.com/countvajhula/elci>`_.
+* **Decentralized discovery:** Package authors include a ``recipes.eld`` in their repo. Elacarte finds it, reads it, and handles the rest. If a package depends on another package, Elacarte follows the advertised "pointer" to the dependency’s repo and discovers its authoritative recipe, recursively.
+* **Self-contained:** Elacarte enables developer tools to find the information they need locally and enables you to conveniently provide that information, avoiding opaque third party interactions, powering tools like `Elci <https://github.com/countvajhula/elci>`_.
 
 How It Works: Primary vs. Pointer
 ---------------------------------
@@ -52,9 +52,9 @@ This ensures you always get the canonical build instructions defined by the peop
 Ultimate Authority
 ------------------
 
-Elacarte's cookbook can be easily edited by you, and it takes precedence over canonical recipes provided by developers and community-maintained archives (like MELPA).
+Elacarte's cookbook can be easily edited by you, and it takes precedence over canonical recipes provided by developers and those found on community-maintained archives like MELPA.
 
-This gives you ultimate authority over the recipes used in your own Emacs, without necessitating any fragile workarounds such as employing inline recipes.
+This gives you ultimate authority over the recipes used in your own Emacs, without necessitating fragile workarounds such as writing inline recipes.
 
 Technical Implementation
 ========================
@@ -76,16 +76,16 @@ Recipe Discovery
 
 "Discovery" is the process by which Elacarte traverses and adds new authoritative recipes to your local cookbook.
 
-When you run ``elacarte-discover-recipes``, the package performs a "clean room" installation:
+When you run ``elacarte-discover-recipes`` (e.g., by providing a repo URL):
 
 * It creates a temporary directory (``~/.emacs.d/elacarte/tmp``), and also temporarily clears ``straight.el``’s internal caches within the scope of the discovery process, ensuring your global Emacs state remains untouched.
-* It clones the target repository into the temp directory to read its ``recipes.eld``, prompting to add these recipes to your cookbook.
-* It does this recursively until all primary recipes are discovered and added.
+* It clones the target repository into the temp directory to read its ``recipes.eld``, prompting to add the primary recipes to your cookbook.
+* It follows pointers to dependencies recursively until all primary recipes are discovered and added.
 
 Integration with Straight.el
 ----------------------------
 
-The cookbook at ``~/.emacs.d/elacarte/cookbooks/my-cookbook.eld`` is served by a corresponding auto-generated file, ``~/.emacs.d/elacarte/.elpa/elacarte-my-cookbook.el``, which implements the Straight recipe protocol. At initialization time, this local cookbook is registered and pushed to the front of ``straight-recipe-repositories``, ensuring that if a recipe exists in your Elacarte cookbook, **it takes precedence** over MELPA, GNU ELPA, or any other archive.
+The cookbook at ``~/.emacs.d/elacarte/cookbooks/my-cookbook.eld`` is served by a corresponding auto-generated file, ``~/.emacs.d/elacarte/.elpa/elacarte-my-cookbook.el``, which implements the Straight recipe protocol. At initialization time, this local cookbook is registered and pushed to the front of ``straight-recipe-repositories``, ensuring that if a recipe exists in your Elacarte cookbook, **it takes precedence** over GNU ELPA, MELPA, or any other archive.
 
 What about Elpaca?
 ------------------
